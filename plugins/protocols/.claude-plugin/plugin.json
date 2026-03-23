@@ -1,7 +1,7 @@
 {
   "name": "protocols",
   "description": "Behavioral protocol skills for Claude Code agents — foreman coordination, gauntlet pipeline, investigation debugging, and more. Integrates with ward for mechanical tool restriction enforcement.",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "author": { "name": "Q" },
   "repository": "https://github.com/ctoth/protocols-plugin"
 }
