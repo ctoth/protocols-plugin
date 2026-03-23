@@ -1,0 +1,4 @@
+when: >
+  session.phase == "adversary" && tool in ["Edit", "Write", "Bash"]
+action: deny
+message: "Adversary protocol active. Read-only analysis — no modifications allowed."

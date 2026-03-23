@@ -1,0 +1,14 @@
+{
+  "name": "protocols-marketplace",
+  "owner": { "name": "Q" },
+  "metadata": {
+    "description": "Agent behavioral protocols with ward enforcement"
+  },
+  "plugins": [
+    {
+      "name": "protocols",
+      "source": "./plugins/protocols",
+      "description": "Behavioral protocol skills (foreman, gauntlet, investigation, etc.) with ward enforcement gates"
+    }
+  ]
+}

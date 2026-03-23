@@ -1,0 +1,7 @@
+when: >
+  session.phase == "foreman" && (
+    tool in ["Bash", "Edit"] ||
+    (tool == "Write" && !("file_path" in input && (input.file_path.contains("/prompts/") || input.file_path.contains("notes-"))))
+  )
+action: deny
+message: "Foreman protocol active. You coordinate, you do not execute. Dispatch a subagent instead. (Write is allowed only to prompts/ and notes-*.md)"

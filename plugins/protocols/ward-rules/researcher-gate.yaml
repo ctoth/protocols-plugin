@@ -1,0 +1,4 @@
+when: >
+  session.phase == "researcher" && tool == "Edit"
+action: deny
+message: "Researcher protocol active. Write new files (reports), don't edit existing code."

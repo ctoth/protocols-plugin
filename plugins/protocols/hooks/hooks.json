@@ -1,0 +1,16 @@
+{
+  "description": "Register protocol ward rules on session start",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/ward-register.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
