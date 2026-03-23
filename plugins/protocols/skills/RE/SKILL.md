@@ -1,7 +1,7 @@
 ---
 name: RE
 description: Reverse engineering protocol. The work product is documentation. Decompile function, document findings in NOTES.md, then next function. Never batch discoveries, never mark phase complete without reviewing NOTES.md against phase requirements.
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # RE Protocol

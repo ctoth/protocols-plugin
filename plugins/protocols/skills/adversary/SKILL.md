@@ -1,7 +1,7 @@
 ---
 name: adversary
 description: Read-only design review against project principles. Checks whether a design or implementation aligns with or violates the project's stated principles. Does not check code quality, bugs, tests, style, or performance — only directional alignment.
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools:
   - Read
   - Glob

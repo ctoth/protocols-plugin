@@ -1,7 +1,7 @@
 ---
 name: investigation
 description: Structured debugging with competing hypotheses and escalation levels. Use when encountering unexpected behavior, multiple possible causes, or after 3+ failed fix attempts. Separates facts from theories and tracks evidence systematically.
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # Investigation Protocol

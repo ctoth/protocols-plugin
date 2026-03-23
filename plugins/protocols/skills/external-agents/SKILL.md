@@ -1,7 +1,7 @@
 ---
 name: external-agents
 description: Use Codex and Gemini CLIs as external reviewers for gated review chunks. They read prompt files and write reports. Use for pre-implementation review, spec validation, architecture critique, or second opinions.
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools:
   - Read
   - Bash

@@ -1,7 +1,7 @@
 ---
 name: iterations
 description: Tracked iteration cycles for reducing failures. Number iterations sequentially, record state before/after, commit atomically per fix. Use when iteratively reducing test failures, fixing bugs in cycles, or any work requiring tracked progress across multiple attempts.
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # Iteration Protocol

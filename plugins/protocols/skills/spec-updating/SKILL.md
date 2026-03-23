@@ -1,7 +1,7 @@
 ---
 name: spec-updating
 description: Spec update workflow with discovery, drafting, external review gates (Codex + Gemini), and integration phases. Use when adding, modifying, or extending specification documents. Specs are truth — code implements specs, never the reverse.
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # Spec-Updating Protocol

@@ -1,7 +1,7 @@
 ---
 name: gauntlet
 description: Four-role sequential pipeline for complex, high-risk changes. Scout surveys the codebase, Coder implements with TDD, Analyst finds problems, Verifier gates the merge. Use for large refactors, architectural shifts, and interdependent multi-phase work.
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # Gauntlet Protocol

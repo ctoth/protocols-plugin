@@ -1,7 +1,7 @@
 ---
 name: phases
 description: Orchestrate multi-phase workflows with parallel and sequential stages. Research, plan, implement, verify — each phase produces filesystem artifacts consumed by the next. Use when task decomposes into stages that would overflow a single agent's context.
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # Workflow Phases Protocol

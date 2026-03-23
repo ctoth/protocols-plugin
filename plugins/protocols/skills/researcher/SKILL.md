@@ -1,7 +1,7 @@
 ---
 name: researcher
 description: Pre-implementation research protocol. Gather information, explore unfamiliar codebases/APIs, answer "how does X work" questions. Has web access. Creates structured findings in docs/reports/ for later synthesis. Use before any non-trivial implementation.
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools:
   - Read
   - Glob

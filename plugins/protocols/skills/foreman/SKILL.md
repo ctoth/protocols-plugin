@@ -1,7 +1,7 @@
 ---
 name: foreman
 description: Coordination-only protocol. You dispatch subagents, you do not execute code. Restricts tools to Read, Write (prompts/ and notes- only), Agent, Glob, Grep. Use when orchestrating multi-agent work.
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools:
   - Read
   - Glob
