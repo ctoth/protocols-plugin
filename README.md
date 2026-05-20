@@ -4,7 +4,7 @@ Agent behavioral protocols for Claude Code, with mechanical tool restriction enf
 
 ## What This Does
 
-Provides 11 behavioral protocol skills that define operational modes for Claude Code agents. Each protocol constrains agent behavior — what tools are available, what workflow to follow, what the agent's role is.
+Provides 12 behavioral protocol skills that define operational modes for Claude Code agents. Each protocol constrains agent behavior — what tools are available, what workflow to follow, what the agent's role is.
 
 Protocols that restrict tools (foreman, adversary, researcher) include ward gate rules that mechanically enforce those restrictions at the PreToolUse hook level, preventing accidental violations.
 
@@ -16,6 +16,7 @@ Protocols that restrict tools (foreman, adversary, researcher) include ward gate
 | **subagent** | How to write and launch subagent prompts (auto-invocable) |
 | **gauntlet** | Scout -> Coder -> Analyst -> Verifier pipeline for high-risk changes |
 | **investigation** | Structured debugging with competing hypotheses and escalation levels |
+| **experiment** | Controlled benchmark experiments with baseline, gates, records, and promote/abandon decisions |
 | **phases** | Parallel/sequential workflow phases with filesystem-based coordination |
 | **iterations** | Tracked iteration cycles for reducing failures with regression detection |
 | **adversary** | Read-only design review against project principles |
@@ -60,6 +61,7 @@ Activate a protocol by invoking it as a skill:
 /protocols:foreman      # Enter foreman coordination mode
 /protocols:gauntlet     # Start a scout->coder->analyst->verifier pipeline
 /protocols:investigation # Begin structured debugging
+/protocols:experiment   # Run a controlled benchmark experiment
 /protocols:adversary    # Run read-only principle alignment check
 /protocols:researcher   # Enter research mode with web access
 ```
