@@ -6,7 +6,27 @@ disable-model-invocation: false
 
 # Subagent Protocol
 
-Use when: launching Task tool for delegated work.
+Use when: launching delegated work — claude agents via the Task tool, or CLI agents (Codex/Gemini) directly.
+
+## Subagents come in two kinds
+
+- **Claude agents** — dispatched via the `Task` tool. Most of this skill is
+  about these.
+- **CLI agents** — Codex, Gemini, and other external reviewer/agent CLIs.
+  Dispatched by running their CLI directly (e.g.
+  `codex exec --dangerously-bypass-approvals-and-sandbox "..."`), NOT via the
+  Task tool. See the `external-agents` skill for invocation details.
+
+A CLI agent IS a subagent. Running its CLI is the dispatch act — the shell
+equivalent of the Task tool. **NEVER wrap a CLI agent inside a Task subagent**
+(spawning a claude agent just to type the CLI command). That is
+double-dispatch: wasted wall-clock and tokens, and it buries the external
+agent's independent judgement behind a claude proxy. Run the CLI directly.
+
+The prompt-file conventions in this skill (physical prompt file, single
+deliverable, exact paths, report location) apply to BOTH kinds — a CLI agent
+reads the same kind of prompt file. The worker-identity declaration and the
+`subagent_type: general-purpose` rule apply ONLY to claude Task agents.
 
 ## CRITICAL: Agent Type
 
@@ -125,6 +145,7 @@ This is not optional. This goes in every scout prompt. Every single one.
 - [ ] Test/verification command included
 - [ ] File-modified workaround included
 - [ ] Output location specified
+- [ ] NO-ONELINERS rule restated verbatim and prominently in the prompt — workers do NOT auto-load this skill, so the dispatcher must copy it into every coder/worker prompt
 - [ ] "No skipped tests" stated explicitly (if testing)
 - [ ] If scout: "verify, don't speculate" constraint included (see above)
 - [ ] Every factual claim about code cites a source (scout report file:line, or code you read yourself)
@@ -157,6 +178,8 @@ Prompt files are an audit trail. If `prompts/scout-foo.md` already exists from a
 **Why:** A `python -c` oneliner evaporates after one use. The next agent that needs the same data must regenerate the entire thing from scratch. A script file is a reusable artifact: write once, run forever, zero marginal token cost.
 
 Write to `scripts/something.py` first, then `uv run python scripts/something.py`. No exceptions.
+
+**Workers do not auto-load this skill.** The dispatcher MUST restate this rule, in full and prominently, in every coder/worker prompt file — otherwise the worker has no source for it and will reach for oneliners. See the dispatch checklist.
 
 ## Rules
 

@@ -12,6 +12,7 @@ allowed-tools:
   - TaskGet
   - TaskList
   - Write
+  - Bash
 ---
 
 **First:** Run `ward set foreman` to activate enforcement for this session.
@@ -33,7 +34,8 @@ Ask: "Is this execution or coordination?"
 **ALLOWED (foreman can use):**
 - `Write` to `prompts/*.md` only
 - `Read` for `reports/*.md` and `~/.claude/CLAUDE.md.d/*.md` protocol files ONLY
-- `Task` to dispatch subagents
+- `Task` to dispatch claude subagents
+- `Bash` ONLY to dispatch a CLI agent (Codex/Gemini) — this is dispatch, not execution. See "CLI agents are subagents" below.
 
 **If about to use a blocked tool -> STOP -> Write prompt file -> Dispatch subagent**
 
@@ -79,6 +81,29 @@ Every prompt to a coding subagent must explicitly say:
 - `git add` the specific files you changed
 - `git commit` with a descriptive message
 - Include the commit hash in your report
+
+### CLI agents (Codex/Gemini) are subagents — run them directly
+
+A CLI reviewer (Codex, Gemini) IS a subagent. The foreman dispatches it the
+same way it dispatches a claude agent — the mechanism is just the CLI instead
+of the `Task` tool. Run it directly:
+
+```
+codex exec --dangerously-bypass-approvals-and-sandbox "Read prompts/X.md and write report to reports/X-report.md"
+```
+
+Running a CLI agent is **dispatch — coordination, not execution.** It is the
+shell equivalent of the `Task` tool, and it is NOT the "Bash for code
+execution" that the HARD STOP blocks.
+
+**NEVER wrap a CLI agent inside a claude `Task` subagent.** That is
+double-dispatch: a claude agent spawned only to type a command is wasted
+wall-clock and tokens, and it buries the external agent's independent
+judgement behind a claude proxy. Run the CLI directly.
+
+This applies to ANY CLI subagent, not just Codex. See the
+`protocols:external-agents` skill for invocation details (the
+`--dangerously-bypass-approvals-and-sandbox` flag, the Codex/Gemini split).
 
 ## NEVER Describe Code You Haven't Read
 
