@@ -1,12 +1,16 @@
 # protocols-plugin
 
-Agent behavioral protocols for Claude Code, with mechanical tool restriction enforcement via [ward](https://github.com/ctoth/ward).
+Agent behavioral protocols for Claude Code, Codex CLI, and Gemini CLI, with mechanical tool restriction enforcement via [ward](https://github.com/ctoth/ward) where supported.
 
 ## What This Does
 
-Provides 12 behavioral protocol skills that define operational modes for Claude Code agents. Each protocol constrains agent behavior — what tools are available, what workflow to follow, what the agent's role is.
+Provides 12 behavioral protocol skills that define operational modes for Claude Code, Codex CLI, and Gemini CLI agents. Each protocol constrains agent behavior — what tools are available, what workflow to follow, what the agent's role is.
 
 Protocols that restrict tools (foreman, adversary, researcher) include ward gate rules that mechanically enforce those restrictions at the PreToolUse hook level, preventing accidental violations.
+
+Codex and Gemini do not use Claude's plugin marketplace, so this repository also
+ships a script-based installer that links the protocol skill directories into
+their user skill roots.
 
 ## Protocols
 
@@ -43,15 +47,51 @@ Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mech
 
 ## Installation
 
+### Claude plugin install
+
 ```bash
 claude plugin marketplace add ctoth/protocols-plugin
 claude plugin install protocols@protocols-marketplace
 ```
 
+### Script-based installer for Codex and Gemini
+
+Use the bundled installer when you want the protocol skills installed into
+Codex and/or Gemini user skill directories:
+
+```bash
+uv run scripts/install_skills.py doctor
+uv run scripts/install_skills.py install --platform codex --platform gemini
+```
+
+What the installer does:
+
+- discovers every `plugins/*/skills/*/SKILL.md` directory;
+- installs Codex skills into both `~/.agents/skills` and
+  `~/.codex/skills/protocols-plugin`;
+- installs Gemini skills into `~/.gemini/skills`;
+- uses symlinks when possible and managed copies when symlinks are unavailable;
+- refuses to overwrite unmanaged destinations unless `--force` is supplied.
+
+Common commands:
+
+```bash
+uv run scripts/install_skills.py install
+uv run scripts/install_skills.py install --platform codex
+uv run scripts/install_skills.py install --platform gemini
+uv run scripts/install_skills.py install --platform claude
+uv run scripts/install_skills.py uninstall
+```
+
+`install --platform claude` uses Claude's native `claude plugin
+marketplace add/install` flow under the hood. Omitting `--platform` installs all
+supported targets.
+
 ## Requirements
 
 - [ward](https://github.com/ctoth/ward) must be installed and configured as a PreToolUse hook
 - Ward must support `WARD_RULES_PATH` for loading rules from plugin directories
+- `uv` is required for the script-based installer
 
 ## Usage
 
