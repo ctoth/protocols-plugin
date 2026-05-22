@@ -4,7 +4,7 @@ Agent behavioral protocols for Claude Code, Codex CLI, and Gemini CLI, with mech
 
 ## What This Does
 
-Provides 12 behavioral protocol skills that define operational modes for Claude Code, Codex CLI, and Gemini CLI agents. Each protocol constrains agent behavior — what tools are available, what workflow to follow, what the agent's role is.
+Provides 13 behavioral protocol skills that define operational modes for Claude Code, Codex CLI, and Gemini CLI agents. Each protocol constrains agent behavior — what tools are available, what workflow to follow, what the agent's role is.
 
 Protocols that restrict tools (foreman, adversary, researcher) include ward gate rules that mechanically enforce those restrictions at the PreToolUse hook level, preventing accidental violations.
 
@@ -23,6 +23,7 @@ their user skill roots.
 | **experiment** | Controlled benchmark experiments with baseline, gates, records, and promote/abandon decisions |
 | **phases** | Parallel/sequential workflow phases with filesystem-based coordination |
 | **iterations** | Tracked iteration cycles for reducing failures with regression detection |
+| **cleanup-refactor** | Deletion-first fixed-point cleanup for refactors, migrations, helper removal, and ownership repair |
 | **adversary** | Read-only design review against project principles |
 | **researcher** | Pre-implementation research with web access |
 | **external-agents** | Using Codex/Gemini CLIs as external reviewers |
@@ -102,6 +103,7 @@ Activate a protocol by invoking it as a skill:
 /protocols:gauntlet     # Start a scout->coder->analyst->verifier pipeline
 /protocols:investigation # Begin structured debugging
 /protocols:experiment   # Run a controlled benchmark experiment
+/protocols:cleanup-refactor # Run deletion-first fixed-point cleanup
 /protocols:adversary    # Run read-only principle alignment check
 /protocols:researcher   # Enter research mode with web access
 ```
