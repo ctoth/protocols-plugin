@@ -35,6 +35,8 @@ Every experiment must have:
 - **Experiment branch**: isolated from the integration branch.
 - **Fast contracts**: tests or telemetry checks that fail before the full
   benchmark if the idea is wrong.
+- **Instrumentation contract**: the reusable telemetry/profiler surface used to
+  observe the bottleneck class before changing solver behavior.
 - **Metric gate**: exact command, timeout, pass/fail threshold, and artifacts.
 - **Failure-analysis gate**: if the metric gate fails or is ambiguous, profiler
   or equivalent operational evidence explaining whether the intended bottleneck
@@ -46,31 +48,62 @@ Every experiment must have:
 
 1. State the literal outcome and active experiment item before each action.
 2. Verify current branch and tracked-file cleanliness.
-3. Run or locate the baseline metric before editing production code.
-4. Create a dedicated experiment branch.
-5. Make the smallest source/config change that tests the hypothesis.
-6. Commit the source/config change with explicit paths.
-7. Run fast contracts.
-8. Run the smallest meaningful metric gate.
-9. If the metric gate fails or is ambiguous, run failure analysis before
+3. Verify the required instrumentation exists for the bottleneck class. If it
+   does not, stop: the next task is instrumentation infrastructure, not an
+   experiment.
+4. Run or locate the baseline metric and baseline telemetry before editing
+   production code.
+5. Create a dedicated experiment branch.
+6. Make the smallest source/config change that tests the hypothesis.
+7. Commit the source/config change with explicit paths.
+8. Run fast contracts.
+9. Run the smallest meaningful metric gate with the same instrumentation
+   enabled.
+10. If the metric gate fails or is ambiguous, run failure analysis before
    calling the experiment complete:
    - use the profiler on the real hot execution path;
    - for Python worker/solver paths, use `py-spy` unless the repository names a
      more specific profiler;
+   - use domain telemetry that observes the claimed bottleneck, not only wall
+     time;
    - compare against the baseline or previous profile;
    - state whether the dominant cost moved, shrank, or stayed unchanged;
    - name the next target from the evidence.
-10. Write `experiments/YYYY-MM-DD-short-name.md`.
-11. Commit the experiment record.
-12. Decide:
+11. Write `experiments/YYYY-MM-DD-short-name.md`.
+12. Commit the experiment record.
+13. Decide:
     - **promote** only if the metric gate passes, regression checks hold, and
       the operational reason for the improvement is recorded;
     - **abandon** only after the failed metric has a profiler-backed or
       operationally measured explanation;
     - **incomplete: profile required** if the gate failed but the bottleneck is
       still unknown.
-13. If abandoning, switch back to the integration branch and record the result
+14. If abandoning, switch back to the integration branch and record the result
     there. Do not merge the failed source delta.
+
+## Instrumentation Rule
+
+Do not start or continue optimization experiments against an opaque bottleneck.
+
+If the available tooling cannot distinguish where the bottleneck lives, first
+build or enable reusable instrumentation for that bottleneck class. The
+instrumentation is infrastructure, not the experiment. Only after it exists can
+an experiment test a single solver/config/encoding hypothesis.
+
+For solver experiments, the instrumentation must be able to separate the
+relevant layers for the domain. Examples:
+
+- routing decision vs backend execution;
+- preprocessing/residual shape vs core solve;
+- grounding size vs solving search;
+- rule-family or predicate-family growth in generated encodings;
+- assignment/propagation churn for watched domain literals;
+- worker/wrapper overhead vs real child-process work.
+
+If the experiment uses a solver with public observer/statistics/propagator APIs,
+read and cite those APIs before declaring the solver opaque or selecting a
+proxy measurement. If the APIs are insufficient, record that verified limit and
+name the external telemetry used instead.
 
 ## Profiling Rule
 
@@ -102,6 +135,8 @@ missed the threshold. In that state the correct status is:
 
 An experiment record for a failed performance gate must answer:
 
+- What instrumentation was available before the source/config change?
+- What baseline telemetry did it produce?
 - Did the intended operational invariant change?
 - Did the hot path move, shrink, or stay the same?
 - Was the profiler attached to the real worker/solver process?
@@ -129,10 +164,12 @@ Single variable: ...
 Baseline:
 - Command: `...`
 - Result: ...
+- Telemetry: ...
 
 Experiment result:
 - Command: `...`
 - Result: ...
+- Telemetry: ...
 
 Failure analysis:
 - Profiler or operational command: `...`
