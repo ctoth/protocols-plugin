@@ -42,6 +42,31 @@ If the target owner or forbidden surface can be discovered by reading the repo,
 read it before editing. Do not turn discoverable uncertainty into an
 implementation blocker.
 
+## Ownership-Understanding Gate
+
+Before choosing a disposition for a symbol or production surface, explain why it
+exists and what kind of thing it is:
+
+- family or charter-backed model;
+- document or decoded IO shape;
+- runtime domain object;
+- semantic reference/type/value object;
+- app or workflow owner surface;
+- CLI/UI adapter;
+- test fixture or scaffold;
+- duplicate helper, compatibility path, or dead surface.
+
+For every DTO, parser, payload, mapping, row, or `from_payload` surface, answer
+whether the shape is already defined by a family, charter, document type, or
+generic IO decoder. If it is, use that owner and delete the duplicate shape. If
+it is not, decide whether the missing owner must be created in the correct
+metadata layer or whether the surface is test-only/dead and should be deleted.
+
+"Only tests use it" is not enough evidence for deletion. It may indicate dead
+production code, but it may also be a boundary contract test for a missing or
+misplaced owner. Read the relevant family, charter, document, and caller
+surfaces before deciding.
+
 ## Fixed-Point Workflow
 
 Run the loop on one bounded slice at a time.
@@ -49,9 +74,10 @@ Run the loop on one bounded slice at a time.
 1. State the literal requested outcome and the active slice.
 2. Verify current branch and relevant dirty state.
 3. Read the whole slice before deciding file disposition.
-4. Decompose the slice by actual symbol or production surface, not just by
+4. Pass the ownership-understanding gate for each symbol or production surface.
+5. Decompose the slice by actual symbol or production surface, not just by
    file.
-5. For each symbol or surface, choose exactly one disposition:
+6. For each symbol or surface, choose exactly one disposition:
    - **delete**: remove it because the target architecture already owns the
      job or the behavior is not needed.
    - **move**: relocate it to the correct owner after verifying it is not
@@ -62,15 +88,15 @@ Run the loop on one bounded slice at a time.
      interface or owner API.
    - **keep**: leave it only when it is already in the correct owner, has no
      forbidden shape, and passes the slice gates.
-6. Delete the wrong production surface first.
-7. Use compiler, type, test, and search failures as the work queue.
-8. Update every caller to the target surface.
-9. Run the slice search gates.
-10. Run the smallest meaningful runtime gates.
-11. Commit the kept reduction atomically.
-12. Update the record file with the action, evidence, gates, commit, and next
+7. Delete the wrong production surface first.
+8. Use compiler, type, test, and search failures as the work queue.
+9. Update every caller to the target surface.
+10. Run the slice search gates.
+11. Run the smallest meaningful runtime gates.
+12. Commit the kept reduction atomically.
+13. Update the record file with the action, evidence, gates, commit, and next
     slice.
-13. Repeat until the search gates and runtime gates produce no remaining work
+14. Repeat until the search gates and runtime gates produce no remaining work
     for the slice.
 
 ## Deletion-First Rule
@@ -201,6 +227,8 @@ The cleanup is complete only when:
 - Renaming a helper to dodge a search gate.
 - Adding a generic-looking wrapper around a specific old path.
 - Hand-writing fields, DTOs, or models that should come from metadata.
+- Deleting or keeping a DTO/parser/payload surface before proving whether a
+  family, charter, document type, or generic IO decoder already owns that shape.
 - Carrying old input forward through coercion or normalization.
 - Treating tests as completion while forbidden production surfaces remain.
 - Calling a draft workstream executable while it still contains unresolved
