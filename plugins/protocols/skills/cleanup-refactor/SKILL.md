@@ -62,6 +62,21 @@ generic IO decoder. If it is, use that owner and delete the duplicate shape. If
 it is not, decide whether the missing owner must be created in the correct
 metadata layer or whether the surface is test-only/dead and should be deleted.
 
+For every union alias, helper accessor family, loaded/document wrapper, or
+`from_payload` helper, classify it before choosing a disposition:
+
+- real domain type;
+- IO boundary carrier;
+- family/charter-backed document surface;
+- compatibility alias hiding multiple representations;
+- test scaffold.
+
+If it is a compatibility alias, delete it first and force callers onto the real
+owner API. If it is an IO boundary carrier, prove the boundary and prevent
+decoded payloads from crossing into core runtime. If it is family/charter-backed,
+use the family, charter, document, or generic decoder directly instead of a
+local helper layer.
+
 "Only tests use it" is not enough evidence for deletion. It may indicate dead
 production code, but it may also be a boundary contract test for a missing or
 misplaced owner. Read the relevant family, charter, document, and caller
@@ -181,6 +196,8 @@ Good gates:
 
 - exact old import path;
 - exact old helper or adapter name;
+- union aliases, helper accessor families, loaded/document wrappers, or
+  `from_payload` helpers that hide multiple representations;
 - field names or payload keys that should be metadata-driven;
 - compatibility phrases such as `legacy`, `fallback`, `normalize`, `coerce`,
   `shim`, `adapter`, `old shape`, or `if old`;
