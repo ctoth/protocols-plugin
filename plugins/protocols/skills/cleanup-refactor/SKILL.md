@@ -90,9 +90,15 @@ Run the loop on one bounded slice at a time.
 2. Verify current branch and relevant dirty state.
 3. Read the whole slice before deciding file disposition.
 4. Pass the ownership-understanding gate for each symbol or production surface.
-5. Decompose the slice by actual symbol or production surface, not just by
-   file.
-6. For each symbol or surface, choose exactly one disposition:
+5. Decompose the slice by file first, then by actual symbol or production
+   surface inside that file.
+6. If any production class, function, helper, alias, shim, fallback, duplicate
+   model, duplicated metadata, compatibility branch, or wrong owner surface in a
+   file violates the target architecture, mark the whole file for deletion.
+7. After deleting the file, use the breakage review to decide which capabilities
+   are recreated in real owner files and which caller paths are deleted.
+8. For each surviving symbol or surface in a file that passed the file-level
+   deletion gate, choose exactly one disposition:
    - **delete**: remove it because the target architecture already owns the
      job or the behavior is not needed.
    - **move**: relocate it to the correct owner after verifying it is not
@@ -103,15 +109,21 @@ Run the loop on one bounded slice at a time.
      interface or owner API.
    - **keep**: leave it only when it is already in the correct owner, has no
      forbidden shape, and passes the slice gates.
-7. Delete the wrong production surface first.
-8. Use compiler, type, test, and search failures as the work queue.
-9. Update every caller to the target surface.
-10. Run the slice search gates.
-11. Run the smallest meaningful runtime gates.
-12. Commit the kept reduction atomically.
-13. Update the record file with the action, evidence, gates, commit, and next
+9. Delete the wrong production file or surface first.
+10. Use compiler, type, test, and search failures as the rethink queue.
+11. For each remaining reference exposed by deletion, run the breakage review:
+   - identify the capability the caller was getting from the deleted surface;
+   - decide whether that capability should still exist;
+   - if it should not exist, delete the caller path too;
+   - if it should exist, identify the real owner that already owns it;
+   - if no real owner exists, create the capability in the correct owner layer;
+   - update the caller to that owner or remove it.
+12. Run the slice search gates.
+13. Run the smallest meaningful runtime gates.
+14. Commit the kept reduction atomically.
+15. Update the record file with the action, evidence, gates, commit, and next
     slice.
-14. Repeat until the search gates and runtime gates produce no remaining work
+16. Repeat until the search gates and runtime gates produce no remaining work
     for the slice.
 
 ## Deletion-First Rule
@@ -129,6 +141,28 @@ identity surface:
 
 If a compatibility path is truly required, name the external constraint that
 forces it. Code controlled by the current stack is not an external constraint.
+
+## Breakage Review Rule
+
+Deletion breakage is not an import-repair queue. It is a forced ownership and
+existence review for every remaining reference.
+
+For each compile, type, test, or search failure caused by deleting a surface,
+answer these questions before editing the caller:
+
+- What exact capability did the deleted surface provide here?
+- Should that capability still exist in the target architecture?
+- If no, what caller path is deleted with it?
+- If yes, which existing owner already owns that capability?
+- If no owner exists, which owner layer must be created or extended?
+- What evidence proves the new owner is not a renamed copy of the deleted
+  surface?
+
+Allowed outcomes are deletion, direct use of an existing owner, or creation of
+the missing owner in the correct layer. Forbidden outcomes are import-only
+repair, moving a function under a new module name, reconstructing the deleted
+module as a cleaner helper, or making tests pass by preserving the old
+responsibility behind another spelling.
 
 ## Ownership Rule
 
