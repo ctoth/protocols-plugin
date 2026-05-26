@@ -151,6 +151,12 @@ This is not optional. This goes in every scout prompt. Every single one.
 - [ ] Every factual claim about code cites a source (scout report file:line, or code you read yourself)
 - [ ] If foreman mode: prompt contains NO implementation details — only objective, file, constraints, and a reference to the scout report
 - [ ] No "Root Cause", "Fix Required", "Key Insight", or "Context" sections that describe code behavior without a citation
+- [ ] If the task is an experiment, benchmark, performance optimization,
+      solver comparison, or routing trial: the worker prompt explicitly forbids
+      switching to, merging into, rebasing, cherry-picking onto, pushing, or
+      otherwise moving the integration branch. Worker may recommend promotion
+      only; a separate verifier/foreman/parent must independently verify and
+      promote.
 
 ## CRITICAL: Parallel Swarm Awareness
 

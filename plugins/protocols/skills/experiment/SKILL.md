@@ -25,6 +25,38 @@ operational fact.
 Change one variable at a time. Measure against a committed or clearly recorded
 baseline. Promote only if the metric gate justifies it.
 
+## Promotion Authority Rule
+
+The agent that changes the experiment branch does **not** decide whether the
+change may land on the integration branch.
+
+Experiment workers may:
+
+- implement the single-variable change on the experiment branch;
+- run tests, profiles, and metric gates;
+- commit the experiment branch work;
+- write the experiment record;
+- state a recommendation in the record.
+
+Experiment workers must not:
+
+- switch to the integration branch for promotion;
+- merge, rebase, cherry-pick, push, or otherwise move the integration branch;
+- treat their own metric interpretation as promotion approval;
+- run the promotion step, even if the worker believes the gate passed.
+
+Promotion requires a separate actor after the worker is done:
+
+- a verifier, foreman, or parent agent reads the record and raw command output;
+- recomputes the gate math independently from the recorded evidence;
+- verifies regression checks and branch cleanliness;
+- confirms the source delta is exactly the passing experiment delta;
+- then performs the integration-branch merge/push if, and only if, the gate is
+  proven to pass.
+
+If a subagent prompt asks a coding worker to promote its own experiment result,
+the prompt violates this protocol. Rewrite the prompt before dispatch.
+
 ## Required Shape
 
 Every experiment must have:
@@ -71,15 +103,25 @@ Every experiment must have:
    - name the next target from the evidence.
 11. Write `experiments/YYYY-MM-DD-short-name.md`.
 12. Commit the experiment record.
-13. Decide:
-    - **promote** only if the metric gate passes, regression checks hold, and
-      the operational reason for the improvement is recorded;
-    - **abandon** only after the failed metric has a profiler-backed or
-      operationally measured explanation;
+13. Worker decision:
+    - **recommend promotion** only if the metric gate appears to pass,
+      regression checks hold, and the operational reason for the improvement is
+      recorded;
+    - **recommend abandon** only after the failed metric has a profiler-backed
+      or operationally measured explanation;
     - **incomplete: profile required** if the gate failed but the bottleneck is
       still unknown.
-14. If abandoning, switch back to the integration branch and record the result
-    there. Do not merge the failed source delta.
+14. Stop worker execution after the experiment record is committed. Do not
+    switch to the integration branch. Do not merge. Do not push. Report the
+    commit hashes and recommendation to the verifier/foreman/parent.
+15. Separate promotion gate:
+    - read the worker's experiment record and command output;
+    - independently recompute the metric gate from the recorded numbers;
+    - verify regression checks and branch cleanliness;
+    - verify the source delta is exactly the intended passing experiment;
+    - only then merge/push to the integration branch.
+16. If abandoning, the separate verifier/foreman/parent records the result on
+    the integration branch if needed. Do not merge the failed source delta.
 
 ## Instrumentation Rule
 
@@ -149,7 +191,7 @@ An experiment record for a failed performance gate must answer:
 
 Date: YYYY-MM-DD
 
-Status: measured on experiment branch; source change [promoted/not promoted].
+Status: measured on experiment branch; source change [recommended for promotion / not promoted].
 
 Experiment branch: `...`
 
@@ -187,7 +229,13 @@ Metric gate:
 
 Outcome: [positive / weakly positive / negative / invalid]
 
-Decision: [promote / abandon / incomplete: profile required]
+Worker recommendation: [recommend promotion / recommend abandon / incomplete: profile required]
+
+Promotion verification:
+- Verifier/foreman/parent: `...`
+- Independent gate calculation: `...`
+- Regression checks: `...`
+- Integration decision: [promoted / not promoted]
 
 Generated diagnostics:
 - `...`
@@ -209,3 +257,5 @@ These generated diagnostics were [committed/not committed].
   the bottleneck moved, shrank, or stayed unchanged.
 - Merging a branch because it is "somewhat faster" while still missing the
   actual gate.
+- Letting the same coding worker implement the experiment, interpret the metric
+  gate, and merge or push the integration branch.

@@ -82,6 +82,18 @@ Every prompt to a coding subagent must explicitly say:
 - `git commit` with a descriptive message
 - Include the commit hash in your report
 
+### Experiment workers never promote themselves
+For benchmark, performance, routing, solver, or other experiment work, coding
+subagents may commit only to the experiment branch and write the experiment
+record. They must not switch to the integration branch, merge, rebase,
+cherry-pick, push, or otherwise move the integration branch.
+
+Experiment worker prompts must say this explicitly. Promotion is a separate
+foreman/verifier/parent action after the worker has stopped and its metric math,
+regression checks, branch cleanliness, and source delta have been independently
+verified. If a worker report says it promoted itself, treat that as a protocol
+violation even if the measured result looks good.
+
 ### CLI agents (Codex/Gemini) are subagents — run them directly
 
 A CLI reviewer (Codex, Gemini) IS a subagent. The foreman dispatches it the
