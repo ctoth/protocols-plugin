@@ -8,10 +8,12 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
-import yaml
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - exercised when CI skips script deps
+    yaml = None
 
 
 def repo_root() -> Path:
@@ -36,7 +38,49 @@ def extract_frontmatter(path: Path) -> str:
 
 def lint_file(path: Path) -> None:
     frontmatter = extract_frontmatter(path)
-    yaml.safe_load(frontmatter)
+    if yaml is not None:
+        yaml.safe_load(frontmatter)
+        return
+
+    lint_simple_frontmatter(frontmatter)
+
+
+def lint_simple_frontmatter(frontmatter: str) -> None:
+    """Validate the simple YAML shape used by skill frontmatter."""
+    lines = frontmatter.splitlines()
+    if not lines:
+        raise ValueError("empty frontmatter")
+
+    current_key: str | None = None
+    seen: set[str] = set()
+    for line_number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+
+        if line.startswith("  - "):
+            if current_key is None:
+                raise ValueError(f"line {line_number}: list item without key")
+            if not line[4:].strip():
+                raise ValueError(f"line {line_number}: empty list item")
+            continue
+
+        if line.startswith(" "):
+            raise ValueError(f"line {line_number}: unsupported indentation")
+
+        key, separator, value = line.partition(":")
+        if not separator:
+            raise ValueError(f"line {line_number}: missing ':'")
+        if not key.strip():
+            raise ValueError(f"line {line_number}: empty key")
+        if key != key.strip():
+            raise ValueError(f"line {line_number}: key has surrounding whitespace")
+        if key in seen:
+            raise ValueError(f"line {line_number}: duplicate key {key!r}")
+
+        seen.add(key)
+        current_key = key
+        if value and not value.startswith(" "):
+            raise ValueError(f"line {line_number}: missing space after ':'")
 
 
 def parse_args() -> argparse.Namespace:
