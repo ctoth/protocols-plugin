@@ -1,0 +1,17 @@
+name: protocols-gates
+version: 0.1.0
+description: >
+  Phase-gate rules for the protocols plugin. Mechanically enforces the tool
+  restrictions of the foreman, adversary, researcher, and experiment protocols
+  at the ward PreToolUse hook, keyed on session.phase. Installed as a ward
+  profile so the gates load from ~/.ward/profiles for every session,
+  independent of WARD_RULES_PATH / CLAUDE_ENV_FILE propagation.
+exports:
+  capabilities:
+    - protocol-phase-gates
+blocks:
+  operations:
+    - foreman-execute
+    - adversary-mutate
+    - researcher-edit
+    - experiment-integration-move

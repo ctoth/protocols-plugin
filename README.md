@@ -55,7 +55,7 @@ the plugin is installed via `claude plugin install`, so no manifest declaration 
 
 Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mechanical enforcement:
 
-1. **SessionStart hook** automatically registers this plugin's `ward-rules/` directory via `WARD_RULES_PATH`
+1. **SessionStart hook** installs/updates this plugin's `protocols-gates` ward profile (from `plugins/protocols/ward-profile/`) into `~/.ward/profiles/`, so the gates load for the `ward eval` hook on every session — independent of environment
 2. When a protocol is activated (e.g., `ward set foreman`), ward's `session.phase` is set
 3. Ward gate rules fire on every tool call, denying tools that the protocol forbids
 
@@ -113,7 +113,7 @@ supported targets.
 ## Requirements
 
 - [ward](https://github.com/ctoth/ward) must be installed and configured as a PreToolUse hook
-- Ward must support `WARD_RULES_PATH` for loading rules from plugin directories
+- Ward must support installable profiles (`ward install-profile`); the SessionStart hook installs the `protocols-gates` profile
 - `uv` is required for the script-based installer
 
 ## Usage

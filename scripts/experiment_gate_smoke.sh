@@ -13,7 +13,7 @@
 set -u
 
 WARD_BIN="${WARD_BIN:-C:/Users/Q/go/bin/ward.exe}"
-RULES_DIR="C:/Users/Q/code/protocols-plugin/plugins/protocols/ward-rules"
+RULES_DIR="C:/Users/Q/code/protocols-plugin/plugins/protocols/ward-profile/rules"
 export WARD_RULES_PATH="$RULES_DIR"
 
 STATE_DIR="$TEMP/ward"
