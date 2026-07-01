@@ -7,6 +7,7 @@ allowed-tools:
   - Glob
   - Grep
   - Task
+  - Workflow
   - TaskCreate
   - TaskUpdate
   - TaskGet
@@ -34,7 +35,8 @@ Ask: "Is this execution or coordination?"
 **ALLOWED (foreman can use):**
 - `Write` to `prompts/*.md` only
 - `Read` for `reports/*.md` and `~/.claude/CLAUDE.md.d/*.md` protocol files ONLY
-- `Task` to dispatch claude subagents
+- `Task` to dispatch a single claude subagent, live and turn-by-turn
+- `Workflow` to dispatch a scripted multi-agent run — this is coordination (the agents do the work), not execution. See "Two Dispatch Mechanisms" below.
 - `Bash` ONLY to dispatch a CLI agent (Codex/Gemini) — this is dispatch, not execution. See "CLI agents are subagents" below.
 
 **If about to use a blocked tool -> STOP -> Write prompt file -> Dispatch subagent**
@@ -54,7 +56,40 @@ prompts/{feature}-{task}.md   # Your instructions to subagents
 reports/{feature}-{task}.md   # Their output
 ```
 
+## Two Dispatch Mechanisms: Task vs Workflow
+
+Coordination is the role. You have two mechanisms to enact it. Pick by whether the
+dispatch **shape** is known before you start.
+
+**Turn-by-turn `Task` dispatch — the default.** You decide each hand-off live: write a
+prompt file, launch one agent, read its report, decide the next. Use when the split
+strategy is unknown in advance — each report changes what you dispatch next. Adaptive,
+exploratory, few agents. Everything else in this skill describes this mechanism.
+
+**`Workflow` scripting — when the shape is fixed and wide.** A deterministic JS script
+fans out and pipelines agents in the background; the control flow (parallel fan-out,
+pipeline stages, loop-until-dry, judge panels, retry) is *coded*, not decided turn by
+turn. Use when you already know the shape: N items through the same stages, a
+find -> verify -> synthesize pipeline, a fixed parallel sweep. It returns validated
+structured data via schemas and runs off your context — so the "NEVER use TaskOutput"
+hazard below does not apply to it (a schema'd `agent()` result is data, not a transcript).
+
+Two constraints on reaching for `Workflow`:
+
+- It requires the user to have **explicitly opted into** multi-agent orchestration — they
+  asked for a workflow, said "ultracode", or invoked a workflow skill. Absent that
+  opt-in, stay on `Task`; do not escalate coordination into a workflow on your own.
+- The coordination discipline is identical either way: one deliverable per agent, agents
+  commit their own work, no agent touches another's files, verify every result against
+  the plan.
+
+Rule of thumb: **unknown shape, or a handful of adaptive hand-offs -> `Task`. Known shape
+with many items or fixed stages, and the user opted in -> `Workflow`.** For complex
+*interdependent* work regardless of mechanism, use the Gauntlet Protocol (`/protocols:gauntlet`).
+
 ## Dispatch Patterns
+
+These patterns apply to either mechanism above.
 
 **Simple tasks** (independent, low risk): dispatch directly. One prompt, one agent, one report.
 
@@ -69,6 +104,11 @@ reports/{feature}-{task}.md   # Their output
 ### NEVER use TaskOutput
 Subagents write reports to `reports/*.md`. Read those files with the Read tool.
 TaskOutput returns the raw agent transcript — massive JSON that will burn the entire context window. Context burned = conversation death spiral.
+
+This is a `Task`-mechanism hazard only. When you need structured data back rather than a
+prose report, that is a signal to use the `Workflow` mechanism instead: `agent(prompt,
+{schema})` returns validated structured output with no transcript. Never parse a raw
+transcript by hand under either mechanism.
 
 ### Every subagent commits its own work
 Uncommitted work does not exist. The deliverable is a commit hash, not "files on disk."
