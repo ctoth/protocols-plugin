@@ -86,12 +86,17 @@ Every experiment must have:
 4. Run or locate the baseline metric and baseline telemetry before editing
    production code.
 5. Create a dedicated experiment branch.
-6. Make the smallest source/config change that tests the hypothesis.
-7. Commit the source/config change with explicit paths.
-8. Run fast contracts.
-9. Run the smallest meaningful metric gate with the same instrumentation
+6. Run `ward set experiment-worker` to activate enforcement for the worker
+   session. Do this after the branch exists (branch creation must happen first)
+   and before making any changes — it mechanically blocks the worker from
+   pushing, merging, rebasing, cherry-picking, or switching the integration
+   branch, so promotion authority stays with a separate actor.
+7. Make the smallest source/config change that tests the hypothesis.
+8. Commit the source/config change with explicit paths.
+9. Run fast contracts.
+10. Run the smallest meaningful metric gate with the same instrumentation
    enabled.
-10. If the metric gate fails or is ambiguous, run failure analysis before
+11. If the metric gate fails or is ambiguous, run failure analysis before
    calling the experiment complete:
    - use the profiler on the real hot execution path;
    - for Python worker/solver paths, use `py-spy` unless the repository names a
@@ -101,9 +106,9 @@ Every experiment must have:
    - compare against the baseline or previous profile;
    - state whether the dominant cost moved, shrank, or stayed unchanged;
    - name the next target from the evidence.
-11. Write `experiments/YYYY-MM-DD-short-name.md`.
-12. Commit the experiment record.
-13. Worker decision:
+12. Write `experiments/YYYY-MM-DD-short-name.md`.
+13. Commit the experiment record.
+14. Worker decision:
     - **recommend promotion** only if the metric gate appears to pass,
       regression checks hold, and the operational reason for the improvement is
       recorded;
@@ -111,16 +116,16 @@ Every experiment must have:
       or operationally measured explanation;
     - **incomplete: profile required** if the gate failed but the bottleneck is
       still unknown.
-14. Stop worker execution after the experiment record is committed. Do not
+15. Stop worker execution after the experiment record is committed. Do not
     switch to the integration branch. Do not merge. Do not push. Report the
     commit hashes and recommendation to the verifier/foreman/parent.
-15. Separate promotion gate:
+16. Separate promotion gate:
     - read the worker's experiment record and command output;
     - independently recompute the metric gate from the recorded numbers;
     - verify regression checks and branch cleanliness;
     - verify the source delta is exactly the intended passing experiment;
     - only then merge/push to the integration branch.
-16. If abandoning, the separate verifier/foreman/parent records the result on
+17. If abandoning, the separate verifier/foreman/parent records the result on
     the integration branch if needed. Do not merge the failed source delta.
 
 ## Instrumentation Rule

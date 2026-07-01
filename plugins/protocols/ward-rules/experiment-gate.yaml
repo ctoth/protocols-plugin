@@ -1,0 +1,8 @@
+when: >
+  session.phase == "experiment-worker"
+  && tool == "Bash"
+  && !("experiment-promote" in session.signals)
+  && input.commands.exists(c,
+       c.name == "git" && c.git_category in ["push", "integrate", "switch"])
+action: deny
+message: "Experiment protocol active. The experiment worker may commit to the experiment branch and write the record, but must NOT move or publish the integration branch (push, merge, rebase, cherry-pick, pull, switch/checkout). Promotion is a separate verifier/foreman/parent action after the record is reviewed. Legitimate promoter override: run `ward allow experiment-promote`."

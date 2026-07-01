@@ -6,7 +6,7 @@ Agent behavioral protocols for Claude Code, Codex CLI, and Gemini CLI, with mech
 
 Provides 13 behavioral protocol skills that define operational modes for Claude Code, Codex CLI, and Gemini CLI agents. Each protocol constrains agent behavior — what tools are available, what workflow to follow, what the agent's role is.
 
-Protocols that restrict tools (foreman, adversary, researcher) include ward gate rules that mechanically enforce those restrictions at the PreToolUse hook level, preventing accidental violations.
+Protocols that restrict tools (foreman, adversary, researcher, experiment) include ward gate rules that mechanically enforce those restrictions at the PreToolUse hook level, preventing accidental violations.
 
 Codex and Gemini do not use Claude's plugin marketplace, so this repository also
 ships a script-based installer that links the protocol skill directories into
@@ -45,6 +45,7 @@ Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mech
 | `foreman-gate.yaml` | `foreman` | Bash, Edit, Write (except prompts/ and notes-*) |
 | `adversary-gate.yaml` | `adversary` | Edit, Write, Bash |
 | `researcher-gate.yaml` | `researcher` | Edit (Write allowed for reports) |
+| `experiment-gate.yaml` | `experiment-worker` | Integration-branch moves — `git push`, `merge`, `rebase`, `cherry-pick`, `pull`, `switch`/`checkout` (commit, add, branch, tag stay allowed; override: `ward allow experiment-promote`) |
 
 ## Installation
 

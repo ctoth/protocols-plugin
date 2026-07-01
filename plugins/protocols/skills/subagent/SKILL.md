@@ -156,7 +156,10 @@ This is not optional. This goes in every scout prompt. Every single one.
       switching to, merging into, rebasing, cherry-picking onto, pushing, or
       otherwise moving the integration branch. Worker may recommend promotion
       only; a separate verifier/foreman/parent must independently verify and
-      promote.
+      promote. The prompt must also instruct the worker to run
+      `ward set experiment-worker` right after creating the experiment branch,
+      so the integration-branch ban is mechanically enforced by the
+      `experiment-gate` ward rule, not merely stated in prose.
 
 ## CRITICAL: Parallel Swarm Awareness
 
