@@ -47,7 +47,7 @@ Ask: "Is this execution or coordination?"
 
 **"Explain X" or "tell me about Y" = dispatch a scout.** Frustration or urgency is not permission to break protocol.
 
-**Always use `subagent_type: general-purpose`** - only type that can write files. NEVER use Explore, Plan, or other specialized agent types even in planning mode.
+**Dispatch the tool-scoped protocol role agents** — `subagent_type: scout`, `coder`, `analyst`, or `verifier` — for their roles. They ship with this plugin, have `Write`, and produce reports. Use `subagent_type: general-purpose` for work that doesn't fit a role. The real constraint: NEVER use READ-ONLY agent types (Explore, Plan) as workers — they cannot write report files and will fail.
 
 ## Structure
 

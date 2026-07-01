@@ -26,13 +26,13 @@ agent's independent judgement behind a claude proxy. Run the CLI directly.
 The prompt-file conventions in this skill (physical prompt file, single
 deliverable, exact paths, report location) apply to BOTH kinds — a CLI agent
 reads the same kind of prompt file. The worker-identity declaration and the
-`subagent_type: general-purpose` rule apply ONLY to claude Task agents.
+agent-type rule (see "CRITICAL: Agent Type") apply ONLY to claude Task agents.
 
 ## CRITICAL: Agent Type
 
-**Always use `subagent_type: general-purpose`** when dispatching via Task tool. NEVER use Explore, Plan, or other specialized agent types even in planning mode - they cannot write report files and will fail.
+Dispatch a **write-capable** agent type. This plugin ships four tool-scoped role agents — `subagent_type: scout`, `coder`, `analyst`, `verifier` — that each have `Write` and are built to produce reports; use them for their gauntlet roles. Use `subagent_type: general-purpose` for work that doesn't fit a role.
 
-Only the general-purpose agent can write files. Other agent types (Explore, Plan, etc.) are read-only. Since subagents need to write reports to `./reports/`, you MUST use general-purpose.
+NEVER use READ-ONLY agent types (Explore, Plan, or similar) as workers, even in planning mode — they cannot write report files to `./reports/` and will fail. Since subagents must write reports, the type you pick MUST be write-capable.
 
 ## The Problem
 

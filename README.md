@@ -30,6 +30,27 @@ their user skill roots.
 | **spec-updating** | Spec update workflow with discovery, draft, and review gates |
 | **RE** | Reverse engineering — documentation is the work product |
 
+## Agents
+
+The plugin ships the four gauntlet roles as **Claude-native** tool-scoped agents in
+`plugins/protocols/agents/`. Dispatch them via the Task tool with
+`subagent_type: scout` / `coder` / `analyst` / `verifier`. Their tool restriction is
+enforced by the agent frontmatter itself (`tools` / `disallowedTools`), independent of ward.
+
+| Agent | `subagent_type` | Tools | Role |
+|-------|-----------------|-------|------|
+| **scout** | `scout` | Read, Glob, Grep, Bash, Write (no Edit) | Survey the codebase, cite `file:line`, do not implement |
+| **coder** | `coder` | Read, Glob, Grep, Bash, Edit, Write | Implement the plan with full TDD; commit own work |
+| **analyst** | `analyst` | Read, Glob, Grep, Bash, Write (no Edit) | Find problems — edge cases, security, races; do not fix |
+| **verifier** | `verifier` | Read, Glob, Grep, Bash, Write (no Edit) | Gate the merge; default NO-MERGE |
+
+These agents are Claude-only. Codex and Gemini do not load Claude plugin agents — they
+consume the equivalent doctrine from the `gauntlet` and `subagent` skills' prose.
+
+The script-based installer (`scripts/install_skills.py`) installs **skills only**. Agents
+load through Claude's native plugin system: the `agents/` directory is auto-discovered when
+the plugin is installed via `claude plugin install`, so no manifest declaration is required.
+
 ## Ward Integration
 
 Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mechanical enforcement:

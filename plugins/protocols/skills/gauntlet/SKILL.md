@@ -14,12 +14,14 @@ Do NOT use for: simple fixes, independent parallel tasks, straightforward test a
 
 **Scout -> Coder -> Analyst -> Verifier**
 
-| Role | Job | Key instruction |
-|------|-----|-----------------|
-| Scout | Survey codebase, find patterns | "Do NOT implement" |
-| Coder | Implement with TDD | "RED -> GREEN -> REFACTOR. All three." |
-| Analyst | Find problems | "Your job is to find problems, not approve" |
-| Verifier | Final gate | "Default is NO-MERGE. Code must earn it." |
+Each role is a real dispatchable agent type shipped by this plugin — dispatch with `subagent_type: scout`, `coder`, `analyst`, or `verifier`, not just a prose instruction. Each is tool-scoped (scout/analyst/verifier have no `Edit`; coder has `Edit` + `Write`) and writes its report to `reports/`.
+
+| Role | `subagent_type` | Job | Key instruction |
+|------|-----------------|-----|-----------------|
+| Scout | `scout` | Survey codebase, find patterns | "Do NOT implement" |
+| Coder | `coder` | Implement with TDD | "RED -> GREEN -> REFACTOR. All three." |
+| Analyst | `analyst` | Find problems | "Your job is to find problems, not approve" |
+| Verifier | `verifier` | Final gate | "Default is NO-MERGE. Code must earn it." |
 
 ## Flow
 
