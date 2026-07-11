@@ -41,8 +41,8 @@ class ActorScopedWardContractTest(unittest.TestCase):
         profile = (ROOT / "plugins/protocols/ward-profile/profile.yaml").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(manifest["version"], "0.3.1")
-        self.assertIn("version: 0.3.1", profile)
+        self.assertEqual(manifest["version"], "0.3.2")
+        self.assertIn("version: 0.3.2", profile)
         self.assertIn("actor-scoped-protocol-phases", profile)
 
     def test_subagent_start_hook_initializes_explicit_roles(self) -> None:
@@ -55,6 +55,22 @@ class ActorScopedWardContractTest(unittest.TestCase):
             for hook in group["hooks"]
         ]
         self.assertEqual(commands, ["${CLAUDE_PLUGIN_ROOT}/hooks/ward-role.sh"])
+        for event_name, script_name in (
+            ("SessionStart", "ward-register.sh"),
+            ("SubagentStart", "ward-role.sh"),
+        ):
+            handlers = [
+                hook
+                for group in hooks[event_name]
+                for hook in group["hooks"]
+            ]
+            self.assertEqual(len(handlers), 1)
+            windows_command = handlers[0]["commandWindows"]
+            self.assertIn("sh.exe -lc", windows_command)
+            self.assertIn("cygpath -u", windows_command)
+            self.assertIn("$PLUGIN_ROOT", windows_command)
+            self.assertIn(f"/hooks/{script_name}", windows_command)
+            self.assertNotIn("bash.exe", windows_command)
 
         role_hook = (ROOT / "plugins/protocols/hooks/ward-role.sh").read_text(
             encoding="utf-8"
@@ -113,9 +129,9 @@ class ActorScopedWardContractTest(unittest.TestCase):
         installer = load_installer()
         self.assertEqual(
             installer.REQUIRED_WARD_REVISION,
-            "fb526ae936ce4715256d23c277ddec448359c598",
+            "cea6f35bdc4dea1180f2bb879dcb3a66f430795d",
         )
-        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.1")
+        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.2")
         self.assertTrue(callable(installer.check_ward_compatibility))
         self.assertTrue(callable(installer.check_claude_plugin_compatibility))
         marketplace = installer.ClaudeMarketplace(
@@ -134,7 +150,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
         current = [
             {
                 "plugin": "protocols@protocols-marketplace",
-                "version": "0.3.1",
+                "version": "0.3.2",
                 "scope": "user",
                 "status": "enabled",
             }
@@ -144,7 +160,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
             installer.check_claude_plugin_compatibility(current, marketplace), []
         )
 
-    def test_codex_plugin_json_requires_current_enabled_role_hook(self) -> None:
+    def test_codex_live_hook_requires_exact_trusted_active_handler(self) -> None:
         installer = load_installer()
         plugin_id = "protocols@protocols-marketplace"
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -177,7 +193,9 @@ class ActorScopedWardContractTest(unittest.TestCase):
                     "installed": [
                         {
                             "pluginId": plugin_id,
-                            "version": "0.3.1",
+                            "name": "protocols",
+                            "marketplaceName": "protocols-marketplace",
+                            "version": "0.3.2",
                             "installed": True,
                             "enabled": True,
                             "source": {"path": str(plugin_root)},
@@ -186,31 +204,186 @@ class ActorScopedWardContractTest(unittest.TestCase):
                 }
             )
             current = installer.parse_codex_plugin_list(current_json)
-            self.assertEqual(installer.check_codex_plugin_compatibility(current), [])
+            hook_key = installer.CODEX_SUBAGENT_HOOK_KEY
+            role_command = (
+                "sh.exe -lc 'exec \"$(cygpath -u \"$PLUGIN_ROOT\")"
+                "/hooks/ward-role.sh\"'"
+            )
+
+            def listing(**handler_overrides: object) -> list[dict[str, object]]:
+                handler: dict[str, object] = {
+                    "key": hook_key,
+                    "eventName": "subagentStart",
+                    "handlerType": "command",
+                    "command": role_command,
+                    "sourcePath": str(manifest_path),
+                    "source": "plugin",
+                    "pluginId": plugin_id,
+                    "enabled": True,
+                    "currentHash": "sha256:role",
+                    "trustStatus": "trusted",
+                }
+                handler.update(handler_overrides)
+                return [
+                    {
+                        "cwd": str(ROOT),
+                        "hooks": [handler],
+                        "warnings": [],
+                        "errors": [],
+                    }
+                ]
+
+            self.assertEqual(
+                installer.check_codex_plugin_compatibility(current, listing()), []
+            )
+            integrity = installer.check_codex_plugin_integrity(
+                current,
+                ROOT / "plugins/protocols/hooks/hooks.json",
+            )
+            self.assertIn("differs from source", " ".join(integrity))
 
             variants = (
-                ([], "is not installed"),
-                ([{**current[0], "enabled": False}], "not enabled"),
-                ([{**current[0], "version": "0.2.0"}], "0.2.0"),
+                (listing(trustStatus="untrusted"), "untrusted"),
+                (listing(trustStatus="modified"), "modified"),
+                (listing(enabled=False), "disabled"),
+                (listing(pluginId="other@marketplace"), "wrong pluginId"),
+                (listing(eventName="sessionStart"), "wrong eventName"),
+                (
+                    listing(sourcePath=str(plugin_root / "other/hooks/hooks.json")),
+                    "active cache",
+                ),
+                ([], "missing"),
+                ([{**listing()[0], "warnings": ["load warning"]}], "load warning"),
+                ([{**listing()[0], "errors": ["load error"]}], "load error"),
             )
-            for entries, message in variants:
+            for hooks_result, message in variants:
                 with self.subTest(message=message):
                     self.assertIn(
                         message,
-                        installer.check_codex_plugin_compatibility(entries)[0],
+                        " ".join(
+                            installer.check_codex_plugin_compatibility(
+                                current, hooks_result
+                            )
+                        ),
                     )
 
-            manifest_path.write_text(
-                json.dumps({"hooks": {"SessionStart": []}}), encoding="utf-8"
+    def test_codex_install_trusts_only_active_protocols_hooks_after_consent(self) -> None:
+        installer = load_installer()
+        plugin_root = Path.home() / ".codex/plugins/cache/protocols-marketplace/protocols/0.3.2"
+        entries = [
+            {
+                "pluginId": installer.CODEX_PROTOCOLS_PLUGIN_ID,
+                "name": "protocols",
+                "marketplaceName": "protocols-marketplace",
+                "version": "0.3.2",
+                "installed": True,
+                "enabled": True,
+                "source": {"path": str(plugin_root)},
+            }
+        ]
+        hashes = {
+            installer.CODEX_SESSION_HOOK_KEY: "sha256:session",
+            installer.CODEX_SUBAGENT_HOOK_KEY: "sha256:subagent",
+        }
+        hooks = [
+            {
+                "key": key,
+                "eventName": event,
+                "handlerType": "command",
+                "command": (
+                    "sh.exe -lc 'exec \"$(cygpath -u \"$PLUGIN_ROOT\")"
+                    f"/hooks/ward-{script}.sh\"'"
+                ),
+                "sourcePath": str(plugin_root / "hooks/hooks.json"),
+                "source": "plugin",
+                "pluginId": installer.CODEX_PROTOCOLS_PLUGIN_ID,
+                "enabled": True,
+                "currentHash": current_hash,
+                "trustStatus": "untrusted",
+            }
+            for key, event, script, current_hash in (
+                (
+                    installer.CODEX_SESSION_HOOK_KEY,
+                    "sessionStart",
+                    "register",
+                    hashes[installer.CODEX_SESSION_HOOK_KEY],
+                ),
+                (
+                    installer.CODEX_SUBAGENT_HOOK_KEY,
+                    "subagentStart",
+                    "role",
+                    hashes[installer.CODEX_SUBAGENT_HOOK_KEY],
+                ),
             )
-            self.assertIn(
-                "SubagentStart",
-                installer.check_codex_plugin_compatibility(current)[0],
+        ]
+        hooks.append(
+            {
+                "key": "unrelated:user-hook:pre_tool_use:0:0",
+                "currentHash": "sha256:unrelated",
+                "trustStatus": "untrusted",
+            }
+        )
+        listing = [{"cwd": str(ROOT), "hooks": hooks, "warnings": [], "errors": []}]
+
+        trusted_listing = [
+            {
+                **listing[0],
+                "hooks": [
+                    {**hook, "trustStatus": "trusted"}
+                    for hook in listing[0]["hooks"]
+                ],
+            }
+        ]
+        with (
+            mock.patch.object(installer, "list_codex_plugins", return_value=entries),
+            mock.patch.object(installer, "check_codex_plugin_integrity", return_value=[]),
+            mock.patch.object(
+                installer,
+                "list_codex_hooks",
+                side_effect=(listing, listing, trusted_listing),
+            ),
+            mock.patch.object(installer, "write_codex_hook_trust") as write_trust,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "--trust-codex-hooks"):
+                installer.install_codex_plugin(False, trust_hooks=False)
+            self.assertEqual(
+                installer.install_codex_plugin(False, trust_hooks=True),
+                "authorized",
             )
-            self.assertIn(
-                "ward-role.sh",
-                installer.check_codex_plugin_compatibility(current)[0],
-            )
+
+        write_trust.assert_called_once_with(hashes)
+
+    def test_codex_trust_batch_write_contains_only_protocols_hashes(self) -> None:
+        installer = load_installer()
+        hashes = {
+            installer.CODEX_SESSION_HOOK_KEY: "sha256:session",
+            installer.CODEX_SUBAGENT_HOOK_KEY: "sha256:subagent",
+        }
+        with mock.patch.object(installer, "codex_app_server_call") as app_server_call:
+            installer.write_codex_hook_trust(hashes)
+
+        app_server_call.assert_called_once_with(
+            "config/batchWrite",
+            {
+                "edits": [
+                    {
+                        "keyPath": "hooks.state",
+                        "value": {
+                            installer.CODEX_SESSION_HOOK_KEY: {
+                                "enabled": True,
+                                "trusted_hash": "sha256:session",
+                            },
+                            installer.CODEX_SUBAGENT_HOOK_KEY: {
+                                "enabled": True,
+                                "trusted_hash": "sha256:subagent",
+                            },
+                        },
+                        "mergeStrategy": "upsert",
+                    }
+                ],
+                "reloadUserConfig": True,
+            },
+        )
 
     def test_codex_install_refreshes_stale_native_plugin(self) -> None:
         installer = load_installer()
@@ -229,19 +402,66 @@ class ActorScopedWardContractTest(unittest.TestCase):
             }
         )
         commands: list[list[str]] = []
+        current_json = json.dumps(
+            {
+                "installed": [
+                    {
+                        "pluginId": plugin_id,
+                        "name": "protocols",
+                        "marketplaceName": "protocols-marketplace",
+                        "version": "0.3.2",
+                        "installed": True,
+                        "enabled": True,
+                        "source": {"path": "current-cache"},
+                    }
+                ]
+            }
+        )
+        list_count = 0
 
         def fake_run_cli(command: list[str]) -> subprocess.CompletedProcess[str]:
+            nonlocal list_count
             commands.append(command)
-            stdout = stale_json if command[-3:] == ["plugin", "list", "--json"] else "{}"
+            if command[-3:] == ["plugin", "list", "--json"]:
+                list_count += 1
+                stdout = stale_json if list_count == 1 else current_json
+            else:
+                stdout = "{}"
             return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
 
         args = installer.argparse.Namespace(
-            command="install", platforms=["codex"], force=False
+            command="install",
+            platforms=["codex"],
+            force=False,
+            trust_codex_hooks=True,
         )
         with (
             mock.patch.object(installer, "parse_args", return_value=args),
             mock.patch.object(installer, "run_cli", side_effect=fake_run_cli),
             mock.patch.object(installer, "target_roots", return_value=()),
+            mock.patch.object(
+                installer,
+                "list_codex_hooks",
+                return_value=[
+                    {
+                        "hooks": [
+                            {"key": installer.CODEX_SESSION_HOOK_KEY, "trustStatus": "trusted"},
+                            {"key": installer.CODEX_SUBAGENT_HOOK_KEY, "trustStatus": "trusted"},
+                        ],
+                        "warnings": [],
+                        "errors": [],
+                    }
+                ],
+            ),
+            mock.patch.object(
+                installer,
+                "codex_hook_hashes_for_authorization",
+                return_value={
+                    installer.CODEX_SESSION_HOOK_KEY: "sha256:session",
+                    installer.CODEX_SUBAGENT_HOOK_KEY: "sha256:subagent",
+                },
+            ),
+            mock.patch.object(installer, "write_codex_hook_trust"),
             mock.patch.object(
                 installer.shutil,
                 "which",
@@ -256,8 +476,39 @@ class ActorScopedWardContractTest(unittest.TestCase):
                 ["C:/bin/codex.cmd", "plugin", "list", "--json"],
                 ["C:/bin/codex.cmd", "plugin", "remove", plugin_id],
                 ["C:/bin/codex.cmd", "plugin", "add", plugin_id, "--json"],
+                ["C:/bin/codex.cmd", "plugin", "list", "--json"],
             ],
         )
+
+    def test_windows_codex_requires_posix_shell_and_cygpath(self) -> None:
+        installer = load_installer()
+        with mock.patch.object(
+            installer.shutil,
+            "which",
+            side_effect=lambda name: None if name == "sh.exe" else "C:/bin/cygpath.exe",
+        ):
+            self.assertIn("sh.exe", " ".join(installer.check_codex_windows_tools()))
+        with mock.patch.object(
+            installer.shutil,
+            "which",
+            side_effect=lambda name: "C:/bin/sh.exe" if name == "sh.exe" else None,
+        ):
+            self.assertIn("cygpath", " ".join(installer.check_codex_windows_tools()))
+
+    def test_codex_ward_lifecycle_requires_all_user_hooks(self) -> None:
+        installer = load_installer()
+        commands = {
+            event: [f"C:/bin/ward.exe {subcommand}"]
+            for event, subcommand in installer.REQUIRED_WARD_HOOKS.items()
+        }
+        self.assertEqual(installer.check_codex_ward_hooks(commands), [])
+        for event_name in installer.REQUIRED_WARD_HOOKS:
+            with self.subTest(event_name=event_name):
+                incomplete = {**commands, event_name: []}
+                self.assertIn(
+                    event_name,
+                    " ".join(installer.check_codex_ward_hooks(incomplete)),
+                )
 
     def test_actor_smokes_and_real_acceptance_harness_are_present(self) -> None:
         profile_smoke = (ROOT / "scripts/ward_profile_verify.sh").read_text(
@@ -269,6 +520,9 @@ class ActorScopedWardContractTest(unittest.TestCase):
         acceptance = (ROOT / "scripts/ward_actor_acceptance.sh").read_text(
             encoding="utf-8"
         )
+        codex_acceptance = (
+            ROOT / "scripts/codex_native_worker_acceptance.sh"
+        ).read_text(encoding="utf-8")
         self.assertIn("agent_id", profile_smoke)
         self.assertIn("uninitialized", profile_smoke)
         self.assertIn("experiment-worker", experiment_smoke)
@@ -286,6 +540,16 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("ward-actor-acceptance-$NONCE.md", acceptance)
         self.assertIn("ward-actor-acceptance", acceptance)
         self.assertIn("FIXTURE_LOCK", acceptance)
+        self.assertIn("codex exec", codex_acceptance)
+        self.assertIn("codex-cli 0.144.1", codex_acceptance)
+        self.assertIn("fresh", codex_acceptance.lower())
+        self.assertIn("agent_type=default", codex_acceptance)
+        self.assertIn("phase=codex-scout", codex_acceptance)
+        self.assertIn("matching actor id", codex_acceptance.lower())
+        self.assertIn("plugin hook run", codex_acceptance.lower())
+        self.assertIn("enforcement denial", codex_acceptance.lower())
+        self.assertIn("actor cleanup", codex_acceptance.lower())
+        self.assertNotIn("ward set", codex_acceptance.lower())
 
 
 if __name__ == "__main__":

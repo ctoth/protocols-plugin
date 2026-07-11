@@ -7,6 +7,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/ward-register.sh",
+            "commandWindows": "sh.exe -lc 'exec \"$(cygpath -u \"$PLUGIN_ROOT\")/hooks/ward-register.sh\"'",
             "timeout": 15
           }
         ]
@@ -18,6 +19,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/ward-role.sh",
+            "commandWindows": "sh.exe -lc 'exec \"$(cygpath -u \"$PLUGIN_ROOT\")/hooks/ward-role.sh\"'",
             "timeout": 5
           }
         ]

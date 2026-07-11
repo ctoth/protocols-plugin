@@ -21,15 +21,22 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
 
 MARKER_FILENAME = ".protocols-plugin-install.json"
 DEFAULT_PLATFORMS = ("codex", "claude", "gemini")
-REQUIRED_WARD_REVISION = "fb526ae936ce4715256d23c277ddec448359c598"
-REQUIRED_PROTOCOLS_VERSION = "0.3.1"
+REQUIRED_WARD_REVISION = "cea6f35bdc4dea1180f2bb879dcb3a66f430795d"
+REQUIRED_PROTOCOLS_VERSION = "0.3.2"
 CODEX_PROTOCOLS_PLUGIN_ID = "protocols@protocols-marketplace"
+CODEX_SESSION_HOOK_KEY = (
+    f"{CODEX_PROTOCOLS_PLUGIN_ID}:hooks/hooks.json:session_start:0:0"
+)
+CODEX_SUBAGENT_HOOK_KEY = (
+    f"{CODEX_PROTOCOLS_PLUGIN_ID}:hooks/hooks.json:subagent_start:0:0"
+)
 REQUIRED_WARD_HOOKS = {
     "PreToolUse": "eval",
     "SubagentStart": "start-actor",
@@ -249,7 +256,158 @@ def list_codex_plugins() -> list[dict[str, object]]:
     return parse_codex_plugin_list(result.stdout)
 
 
-def check_codex_plugin_compatibility(entries: list[dict[str, object]]) -> list[str]:
+def codex_app_server_call(method: str, params: dict[str, object]) -> object:
+    process = subprocess.Popen(
+        codex_cli_cmd("app-server", "--stdio"),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    if process.stdin is None or process.stdout is None:
+        process.kill()
+        raise RuntimeError("Codex app-server stdio pipes are unavailable")
+
+    timed_out = False
+
+    def kill_on_timeout() -> None:
+        nonlocal timed_out
+        timed_out = True
+        process.kill()
+
+    timer = threading.Timer(30, kill_on_timeout)
+    timer.start()
+
+    def request(request_id: int, request_method: str, request_params: object) -> object:
+        process.stdin.write(
+            json.dumps(
+                {"method": request_method, "id": request_id, "params": request_params}
+            )
+            + "\n"
+        )
+        process.stdin.flush()
+        while line := process.stdout.readline():
+            try:
+                response = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(response, dict) or response.get("id") != request_id:
+                continue
+            if "error" in response:
+                raise RuntimeError(
+                    f"Codex app-server {request_method} failed: {response['error']}"
+                )
+            return response.get("result")
+        if timed_out:
+            raise RuntimeError(f"Codex app-server {request_method} timed out")
+        raise RuntimeError(f"Codex app-server {request_method} closed without a response")
+
+    try:
+        request(
+            1,
+            "initialize",
+            {
+                "clientInfo": {
+                    "name": "protocols_plugin_installer",
+                    "title": "Protocols Plugin Installer",
+                    "version": REQUIRED_PROTOCOLS_VERSION,
+                }
+            },
+        )
+        process.stdin.write(json.dumps({"method": "initialized"}) + "\n")
+        process.stdin.flush()
+        return request(2, method, params)
+    finally:
+        timer.cancel()
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+
+
+def list_codex_hooks() -> list[dict[str, object]]:
+    result = codex_app_server_call("hooks/list", {"cwds": [str(repo_root())]})
+    data = result.get("data") if isinstance(result, dict) else None
+    if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+        raise RuntimeError("Codex hooks/list returned invalid data")
+    return data
+
+
+def write_codex_hook_trust(hashes: dict[str, str]) -> None:
+    expected_keys = {CODEX_SESSION_HOOK_KEY, CODEX_SUBAGENT_HOOK_KEY}
+    if set(hashes) != expected_keys or not all(
+        value.startswith("sha256:") for value in hashes.values()
+    ):
+        raise RuntimeError("Refusing to authorize anything except the two active protocols hooks")
+    codex_app_server_call(
+        "config/batchWrite",
+        {
+            "edits": [
+                {
+                    "keyPath": "hooks.state",
+                    "value": {
+                        key: {"enabled": True, "trusted_hash": hashes[key]}
+                        for key in (CODEX_SESSION_HOOK_KEY, CODEX_SUBAGENT_HOOK_KEY)
+                    },
+                    "mergeStrategy": "upsert",
+                }
+            ],
+            "reloadUserConfig": True,
+        },
+    )
+
+
+def active_codex_plugin_root(entry: dict[str, object]) -> Path | None:
+    values = (entry.get("marketplaceName"), entry.get("name"), entry.get("version"))
+    cache_root = (
+        Path.home() / ".codex" / "plugins" / "cache" / values[0] / values[1] / values[2]
+        if all(isinstance(value, str) for value in values)
+        else None
+    )
+    source = entry.get("source")
+    source_path = source.get("path") if isinstance(source, dict) else None
+    if cache_root is not None and cache_root.is_dir():
+        return cache_root
+    return Path(source_path) if isinstance(source_path, str) else None
+
+
+def check_codex_plugin_integrity(
+    entries: list[dict[str, object]], source_manifest: Path
+) -> list[str]:
+    entry = next(
+        (
+            candidate
+            for candidate in entries
+            if candidate.get("pluginId") == CODEX_PROTOCOLS_PLUGIN_ID
+            and candidate.get("installed") is True
+        ),
+        None,
+    )
+    plugin_root = active_codex_plugin_root(entry) if entry else None
+    if plugin_root is None:
+        return ["Codex protocols plugin cache root is unavailable"]
+    source_hooks = source_manifest.parent
+    failures: list[str] = []
+    for name in ("hooks.json", "ward-register.sh", "ward-role.sh"):
+        source_path = source_hooks / name
+        cached_path = plugin_root / "hooks" / name
+        try:
+            matches = source_path.read_bytes() == cached_path.read_bytes()
+        except OSError as error:
+            failures.append(f"Codex hook cache integrity unreadable for {name}: {error}")
+            continue
+        if not matches:
+            failures.append(f"Codex hook cache differs from source: {name}")
+    return failures
+
+
+def check_codex_plugin_compatibility(
+    entries: list[dict[str, object]], hook_results: list[dict[str, object]]
+) -> list[str]:
     entry = next(
         (
             candidate
@@ -271,67 +429,143 @@ def check_codex_plugin_compatibility(entries: list[dict[str, object]]) -> list[s
             f"{entry.get('version', 'unknown')}; required {REQUIRED_PROTOCOLS_VERSION}"
         )
 
-    source = entry.get("source")
-    source_path = source.get("path") if isinstance(source, dict) else None
-    name = entry.get("name")
-    marketplace_name = entry.get("marketplaceName")
-    version = entry.get("version")
-    cache_root = (
-        Path.home()
-        / ".codex"
-        / "plugins"
-        / "cache"
-        / marketplace_name
-        / name
-        / version
-        if all(isinstance(value, str) for value in (marketplace_name, name, version))
-        else None
-    )
-    plugin_root = (
-        cache_root
-        if cache_root is not None and cache_root.is_dir()
-        else Path(source_path) if isinstance(source_path, str) else None
-    )
-    manifest_path = plugin_root / "hooks" / "hooks.json" if plugin_root else None
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path else {}
-    except (OSError, json.JSONDecodeError) as error:
-        failures.append(
-            f"Codex plugin hook manifest is unreadable at {manifest_path}: {error}"
-        )
+    plugin_root = active_codex_plugin_root(entry)
+    expected_source = plugin_root / "hooks" / "hooks.json" if plugin_root else None
+    for result in hook_results:
+        warnings = result.get("warnings")
+        errors = result.get("errors")
+        if isinstance(warnings, list) and warnings:
+            failures.append(f"Codex hooks/list load warning: {warnings}")
+        if isinstance(errors, list) and errors:
+            failures.append(f"Codex hooks/list load error: {errors}")
+    handlers = [
+        hook
+        for result in hook_results
+        for hook in (result.get("hooks") if isinstance(result.get("hooks"), list) else [])
+        if isinstance(hook, dict) and hook.get("key") == CODEX_SUBAGENT_HOOK_KEY
+    ]
+    if not handlers:
+        failures.append(f"Codex live hook is missing: {CODEX_SUBAGENT_HOOK_KEY}")
         return failures
-
-    hooks = manifest.get("hooks") if isinstance(manifest, dict) else None
-    groups = hooks.get("SubagentStart") if isinstance(hooks, dict) else None
-    role_hook_found = False
-    if isinstance(groups, list):
-        for group in groups:
-            nested = group.get("hooks") if isinstance(group, dict) else None
-            if not isinstance(nested, list):
-                continue
-            if any(
-                isinstance(hook, dict)
-                and isinstance(hook.get("command"), str)
-                and hook["command"].replace("\\", "/").endswith("/ward-role.sh")
-                for hook in nested
-            ):
-                role_hook_found = True
-                break
-    if not role_hook_found:
+    hook = handlers[0]
+    expected = {
+        "eventName": "subagentStart",
+        "handlerType": "command",
+        "source": "plugin",
+        "pluginId": CODEX_PROTOCOLS_PLUGIN_ID,
+    }
+    for field, value in expected.items():
+        if hook.get(field) != value:
+            failures.append(f"Codex live hook has wrong {field}: {hook.get(field)!r}")
+    command = hook.get("command")
+    if not isinstance(command, str) or not all(
+        token in command.replace("\\", "/")
+        for token in ("sh.exe -lc", "cygpath -u", "/hooks/ward-role.sh")
+    ) or "bash.exe" in command:
+        failures.append("Codex live hook has wrong Windows command for ward-role.sh")
+    source_path = hook.get("sourcePath")
+    if expected_source is None or not isinstance(source_path, str) or (
+        os.path.normcase(os.path.abspath(source_path))
+        != os.path.normcase(os.path.abspath(expected_source))
+    ):
+        failures.append("Codex live hook is not from the active cache manifest")
+    if hook.get("enabled") is not True:
+        failures.append(f"Codex live hook is disabled: {CODEX_SUBAGENT_HOOK_KEY}")
+    trust_status = hook.get("trustStatus")
+    if trust_status != "trusted":
         failures.append(
-            "Codex plugin hook manifest is missing SubagentStart -> ward-role.sh"
+            f"Codex live hook {CODEX_SUBAGENT_HOOK_KEY} is {trust_status}; "
+            "rerun install with --trust-codex-hooks"
         )
     return failures
 
 
-def install_codex_plugin(force: bool) -> str:
+def codex_hook_hashes_for_authorization(
+    entries: list[dict[str, object]], hook_results: list[dict[str, object]]
+) -> dict[str, str]:
+    entry = next(
+        (
+            candidate
+            for candidate in entries
+            if candidate.get("pluginId") == CODEX_PROTOCOLS_PLUGIN_ID
+            and candidate.get("installed") is True
+        ),
+        None,
+    )
+    plugin_root = active_codex_plugin_root(entry) if entry else None
+    expected_source = plugin_root / "hooks" / "hooks.json" if plugin_root else None
+    expected = {
+        CODEX_SESSION_HOOK_KEY: ("sessionStart", "/hooks/ward-register.sh"),
+        CODEX_SUBAGENT_HOOK_KEY: ("subagentStart", "/hooks/ward-role.sh"),
+    }
+    for result in hook_results:
+        if result.get("warnings") or result.get("errors"):
+            raise RuntimeError(
+                f"Codex hooks/list reported load failures: "
+                f"warnings={result.get('warnings')!r}, errors={result.get('errors')!r}"
+            )
+    all_hooks = [
+        hook
+        for result in hook_results
+        for hook in (result.get("hooks") if isinstance(result.get("hooks"), list) else [])
+        if isinstance(hook, dict)
+    ]
+    hashes: dict[str, str] = {}
+    for key, (event_name, script_suffix) in expected.items():
+        hook = next((candidate for candidate in all_hooks if candidate.get("key") == key), None)
+        if hook is None:
+            raise RuntimeError(f"Codex hooks/list is missing active protocols hook {key}")
+        command = hook.get("command")
+        source_path = hook.get("sourcePath")
+        current_hash = hook.get("currentHash")
+        if (
+            hook.get("eventName") != event_name
+            or hook.get("handlerType") != "command"
+            or hook.get("source") != "plugin"
+            or hook.get("pluginId") != CODEX_PROTOCOLS_PLUGIN_ID
+            or hook.get("enabled") is not True
+            or not isinstance(command, str)
+            or "sh.exe -lc" not in command
+            or "cygpath -u" not in command
+            or script_suffix not in command.replace("\\", "/")
+            or "bash.exe" in command
+            or expected_source is None
+            or not isinstance(source_path, str)
+            or os.path.normcase(os.path.abspath(source_path))
+            != os.path.normcase(os.path.abspath(expected_source))
+            or not isinstance(current_hash, str)
+            or not current_hash.startswith("sha256:")
+        ):
+            raise RuntimeError(f"Codex hook is not the exact active protocols handler: {key}")
+        hashes[key] = current_hash
+    return hashes
+
+
+def install_codex_plugin(force: bool, *, trust_hooks: bool) -> str:
     entries = list_codex_plugins()
     installed = any(
         entry.get("pluginId") == CODEX_PROTOCOLS_PLUGIN_ID
         and entry.get("installed") is True
         for entry in entries
     )
-    stale = bool(check_codex_plugin_compatibility(entries))
+    source_manifest = repo_root() / "plugins" / "protocols" / "hooks" / "hooks.json"
+    entry = next(
+        (
+            candidate
+            for candidate in entries
+            if candidate.get("pluginId") == CODEX_PROTOCOLS_PLUGIN_ID
+            and candidate.get("installed") is True
+        ),
+        None,
+    )
+    stale = bool(
+        entry is not None
+        and (
+            entry.get("enabled") is not True
+            or entry.get("version") != REQUIRED_PROTOCOLS_VERSION
+            or check_codex_plugin_integrity(entries, source_manifest)
+        )
+    )
     if installed and (stale or force):
         remove_result = run_cli(
             codex_cli_cmd("plugin", "remove", CODEX_PROTOCOLS_PLUGIN_ID)
@@ -342,8 +576,47 @@ def install_codex_plugin(force: bool) -> str:
             codex_cli_cmd("plugin", "add", CODEX_PROTOCOLS_PLUGIN_ID, "--json")
         )
         ensure_success(add_result, f"codex plugin add {CODEX_PROTOCOLS_PLUGIN_ID}")
-        return "refreshed" if installed else "installed"
-    return "unchanged"
+        install_status = "refreshed" if installed else "installed"
+    else:
+        install_status = "unchanged"
+
+    hook_results = list_codex_hooks()
+    current_entries = list_codex_plugins() if install_status != "unchanged" else entries
+    hashes = codex_hook_hashes_for_authorization(current_entries, hook_results)
+    trusted = all(
+        any(
+            hook.get("key") == key and hook.get("trustStatus") == "trusted"
+            for result in hook_results
+            for hook in (result.get("hooks") if isinstance(result.get("hooks"), list) else [])
+            if isinstance(hook, dict)
+        )
+        for key in hashes
+    )
+    if trusted:
+        return install_status
+    if not trust_hooks:
+        raise RuntimeError(
+            "Codex protocols hooks are not authorized. Rerun with "
+            "--trust-codex-hooks to trust exactly the active SessionStart and "
+            "SubagentStart hashes."
+        )
+    write_codex_hook_trust(hashes)
+    verified = list_codex_hooks()
+    verified_hashes = codex_hook_hashes_for_authorization(current_entries, verified)
+    failures = check_codex_plugin_compatibility(current_entries, verified)
+    for key in verified_hashes:
+        if not any(
+            hook.get("key") == key and hook.get("trustStatus") == "trusted"
+            for result in verified
+            for hook in (result.get("hooks") if isinstance(result.get("hooks"), list) else [])
+            if isinstance(hook, dict)
+        ):
+            failures.append(f"Codex hook authorization is absent after write: {key}")
+    if failures:
+        raise RuntimeError(
+            "Codex hook authorization did not become active: " + "; ".join(failures)
+        )
+    return "authorized" if install_status == "unchanged" else f"{install_status}, authorized"
 
 
 def uninstall_codex_plugin() -> str:
@@ -360,8 +633,7 @@ def uninstall_codex_plugin() -> str:
     return "removed"
 
 
-def installed_ward_hook_commands() -> dict[str, list[str]]:
-    settings_path = Path.home() / ".claude" / "settings.json"
+def installed_hook_commands(settings_path: Path) -> dict[str, list[str]]:
     try:
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -385,6 +657,46 @@ def installed_ward_hook_commands() -> dict[str, list[str]]:
                     event_commands.append(command)
         commands[event_name] = event_commands
     return commands
+
+
+def check_codex_ward_hooks(commands: dict[str, list[str]]) -> list[str]:
+    failures: list[str] = []
+    for event_name, subcommand in REQUIRED_WARD_HOOKS.items():
+        if not any(
+            re.search(
+                rf"(?:^|[/\\])ward(?:\.exe)?\s+{re.escape(subcommand)}(?:\s|$)",
+                command,
+            )
+            for command in commands.get(event_name, [])
+        ):
+            failures.append(
+                f"Missing Ward {event_name} hook for `{subcommand}` in ~/.codex/hooks.json; "
+                "run `ward install`"
+            )
+    return failures
+
+
+def check_codex_windows_tools() -> list[str]:
+    if os.name != "nt":
+        return []
+    failures: list[str] = []
+    sh_path = shutil.which("sh.exe")
+    cygpath_path = shutil.which("cygpath.exe")
+    if sh_path is None:
+        failures.append(
+            "Codex Windows hooks require sh.exe from a POSIX shell distribution"
+        )
+    if cygpath_path is None:
+        failures.append(
+            "Codex Windows hooks require cygpath from the same POSIX shell distribution"
+        )
+    elif sh_path is not None:
+        probe = run_cli([sh_path, "-lc", "command -v cygpath"])
+        if probe.returncode != 0 or not probe.stdout.strip():
+            failures.append(
+                "Codex Windows hooks require cygpath to be available inside sh.exe"
+            )
+    return failures
 
 
 def check_ward_compatibility(ward_path: str) -> tuple[list[str], list[str]]:
@@ -428,7 +740,7 @@ def check_ward_compatibility(ward_path: str) -> tuple[list[str], list[str]]:
             f"required {REQUIRED_PROTOCOLS_VERSION}"
         )
 
-    installed_hooks = installed_ward_hook_commands()
+    installed_hooks = installed_hook_commands(Path.home() / ".claude" / "settings.json")
     for event_name, subcommand in REQUIRED_WARD_HOOKS.items():
         event_commands = installed_hooks.get(event_name, [])
         if not any(
@@ -756,18 +1068,48 @@ def run_doctor(skills: list[Skill]) -> int:
     if codex_path:
         print(f"      {codex_path}")
         try:
-            codex_failures = check_codex_plugin_compatibility(list_codex_plugins())
+            codex_entries = list_codex_plugins()
+            codex_hooks = list_codex_hooks()
+            codex_failures = check_codex_plugin_compatibility(
+                codex_entries, codex_hooks
+            )
+            integrity_failures = check_codex_plugin_integrity(
+                codex_entries,
+                root / "plugins" / "protocols" / "hooks" / "hooks.json",
+            )
+            windows_failures = check_codex_windows_tools()
+            lifecycle_failures = check_codex_ward_hooks(
+                installed_hook_commands(Path.home() / ".codex" / "hooks.json")
+            )
         except RuntimeError as error:
             codex_failures = [str(error)]
+            integrity_failures = []
+            windows_failures = []
+            lifecycle_failures = []
         if codex_failures:
             for failure in codex_failures:
                 print(f"  - FAIL: {failure}")
             failures += len(codex_failures)
         else:
             print(
-                "  - OK: Codex plugin version "
-                f"{REQUIRED_PROTOCOLS_VERSION} with SubagentStart role hook"
+                "  - OK: live Codex SubagentStart hook is enabled, trusted, "
+                "and active"
             )
+        if integrity_failures:
+            for failure in integrity_failures:
+                print(f"  - FAIL: {failure}")
+            failures += len(integrity_failures)
+        else:
+            print("  - OK: Codex plugin source/cache hook integrity")
+        for failure_group in (windows_failures, lifecycle_failures):
+            if failure_group:
+                for failure in failure_group:
+                    print(f"  - FAIL: {failure}")
+                failures += len(failure_group)
+        if not windows_failures:
+            print("  - OK: Codex Windows sh.exe and cygpath prerequisites")
+        if not lifecycle_failures:
+            print("  - OK: full Codex Ward lifecycle hook chain")
     else:
         failures += 1
 
@@ -818,6 +1160,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Replace existing conflicting installs",
     )
+    parser.add_argument(
+        "--trust-codex-hooks",
+        action="store_true",
+        help=(
+            "Explicitly authorize only the active protocols SessionStart and "
+            "SubagentStart hook hashes returned by Codex hooks/list"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -846,7 +1196,9 @@ def main() -> int:
         if platform_name == "codex":
             print(f"{args.command.title()} codex plugin via native Codex CLI")
             if args.command == "install":
-                codex_result = install_codex_plugin(args.force)
+                codex_result = install_codex_plugin(
+                    args.force, trust_hooks=args.trust_codex_hooks
+                )
             else:
                 codex_result = uninstall_codex_plugin()
             print(f"  - {CODEX_PROTOCOLS_PLUGIN_ID}: {codex_result}")

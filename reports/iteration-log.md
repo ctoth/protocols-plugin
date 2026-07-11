@@ -11,3 +11,9 @@
 - Target: native Codex plugin refresh and independent doctor compatibility checks
 - Result: 0 failures in 9 focused installer contract tests; Codex and Claude at 0.3.1; full gate passed
 - Commits: included in this atomic iteration fix
+
+## 003 - 2026-07-11
+- Start: 0 failures in 9 focused installer contract tests
+- Target: native Codex Windows hook execution, exact live trust, and fresh default-worker acceptance
+- Result: 0 failures in 13 focused contracts; deterministic gate stages passed; live doctor correctly awaits the separate 0.3.2 refresh/trust verifier
+- Commits: included in this atomic iteration fix

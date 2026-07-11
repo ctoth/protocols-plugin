@@ -125,7 +125,8 @@ links, and/or to install Gemini skill links:
 
 ```bash
 uv run scripts/install_skills.py doctor
-uv run scripts/install_skills.py install --platform codex --platform gemini
+uv run scripts/install_skills.py install --platform codex --trust-codex-hooks
+uv run scripts/install_skills.py install --platform gemini
 ```
 
 What the installer does:
@@ -134,6 +135,9 @@ What the installer does:
 - installs `protocols@protocols-marketplace` through `codex plugin add`;
 - refreshes a stale Codex native plugin with an intentional `codex plugin
   remove` followed by `codex plugin add`;
+- queries Codex's live `hooks/list` API and, only with the explicit
+  `--trust-codex-hooks` flag, authorizes exactly the active protocols
+  `SessionStart` and `SubagentStart` hashes through `config/batchWrite`;
 - installs Codex skills into both `~/.agents/skills` and
   `~/.codex/skills/protocols-plugin`;
 - installs Gemini skills into `~/.gemini/skills`;
@@ -143,8 +147,8 @@ What the installer does:
 Common commands:
 
 ```bash
-uv run scripts/install_skills.py install
-uv run scripts/install_skills.py install --platform codex
+uv run scripts/install_skills.py install --trust-codex-hooks
+uv run scripts/install_skills.py install --platform codex --trust-codex-hooks
 uv run scripts/install_skills.py install --platform gemini
 uv run scripts/install_skills.py install --platform claude
 uv run scripts/install_skills.py uninstall
@@ -153,26 +157,32 @@ uv run scripts/install_skills.py uninstall
 `install --platform claude` uses Claude's native `claude plugin
 marketplace add/install` flow under the hood. `install --platform codex` keeps
 the existing skill-link behavior and also installs or refreshes the native
-Codex plugin. Omitting `--platform` installs all supported targets. Restart
-Codex after any native plugin install or refresh so the new lifecycle hook
-chain is loaded.
+Codex plugin. Hook authorization is never implicit: when either protocols hook
+is new or modified, Codex installation fails with the exact remediation until
+`--trust-codex-hooks` is supplied. Omitting `--platform` installs all supported
+targets. Restart Codex after any native plugin install, refresh, or trust write
+so the new lifecycle hook chain is loaded.
 
 ## Required compatibility set
 
-- Protocols Claude and Codex native plugins `0.3.1`
-- `protocols-gates` Ward profile `0.3.1`
-- Ward revision `fb526ae936ce4715256d23c277ddec448359c598`, built from a clean committed tree
+- Protocols Claude and Codex native plugins `0.3.2`
+- `protocols-gates` Ward profile `0.3.2`
+- Ward revision `cea6f35bdc4dea1180f2bb879dcb3a66f430795d`, built from a clean committed tree
 - Ward lifecycle hooks: `PreToolUse eval`, `SubagentStart start-actor`,
   `SubagentStop end-actor`, and `SessionEnd end-session`, each installed by
   `ward install`
 - `jq` for safe SubagentStart role parsing
+- On Windows, `sh.exe` with `cygpath` from the same POSIX shell distribution
+  for native Codex plugin hook execution
 - `uv` is required for the script-based installer
 
 `uv run scripts/install_skills.py doctor` checks Claude and Codex independently.
-It fails if any Ward capability, revision, Claude lifecycle hook, profile
-version, installed Claude plugin version, installed Codex plugin version, or
-Codex cached/source `SubagentStart -> ward-role.sh` hook is missing or stale. A
-coherent install is proved with:
+It fails if any Ward capability, revision, Claude lifecycle hook, Codex
+lifecycle hook, profile version, installed plugin version, Windows shell
+prerequisite, source/cache integrity check, or exact live Codex
+`SubagentStart` handler is missing, stale, disabled, untrusted, modified, or
+loaded with warnings/errors. Live effective state and source/cache integrity are
+reported as separate evidence. A coherent install is proved with:
 
 ```bash
 ward validate-profile ./plugins/protocols/ward-profile
@@ -181,13 +191,16 @@ ward list-profiles
 ward validate
 claude plugin update protocols@protocols-marketplace
 claude plugin list
-uv run scripts/install_skills.py install --platform codex
+uv run scripts/install_skills.py install --platform codex --trust-codex-hooks
 codex plugin list --json
 uv run scripts/install_skills.py doctor
 ```
 
 After a Codex refresh, restart Codex before running the separate live native
 spawn acceptance. An already-running process retains its previous hook chain.
+The separate paid live gate is
+`bash scripts/codex_native_worker_acceptance.sh`; deterministic verification
+only proves that this harness and its required invariants are present.
 
 ## Verification
 
