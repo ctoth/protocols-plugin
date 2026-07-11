@@ -1,97 +1,113 @@
 #!/usr/bin/env bash
-#
-# Verify the protocols-gates ward profile enforces the phase gates AFTER being
-# installed, with WARD_RULES_PATH explicitly UNSET — so the result depends ONLY
-# on installed profiles (~/.ward/profiles), the previously-broken path.
-#
-# This is the proof for the profile migration: the foreman-phase Bash DENY here
-# happens with NO WARD_RULES_PATH in the environment, which the old wiring could
-# never achieve for the `ward eval` hook process.
-#
-# Uses THROWAWAY session ids only and deletes their state files afterward.
-# It does NOT run `ward set` on any live session.
+# Verify the installed profile against one actor-scoped session family.
 
 set -u
 
-WARD_BIN="${WARD_BIN:-ward}"
-PROFILE_DIR="${PROFILE_DIR:-C:/Users/Q/code/protocols-plugin/plugins/protocols/ward-profile}"
-
-# CRITICAL: results must depend only on installed profiles.
-unset WARD_RULES_PATH
-unset WARD_SESSION
-
-STATE_DIR="$TEMP/ward"
-SID_FOREMAN="wp-verify-foreman-$$"
-SID_PLANNING="wp-verify-planning-$$"
-SID_EXP="wp-verify-exp-$$"
-
-# Throwaway git repo as cwd (Windows-form path so ward.exe can chdir / see git).
+if [ -z "${WARD_BIN:-}" ] && [ -x /mnt/c/Users/Q/go/bin/ward.exe ]; then
+  WARD_BIN=/mnt/c/Users/Q/go/bin/ward.exe
+else
+  WARD_BIN="${WARD_BIN:-ward}"
+fi
+ROOT="${ROOT:-$PWD}"
+PROFILE_DIR="${PROFILE_DIR:-$ROOT/plugins/protocols/ward-profile}"
+ROLE_HOOK="$ROOT/plugins/protocols/hooks/ward-role.sh"
+SID="wp-actor-family-$$"
+SCOUT_ID="scout-$$"
+EXP_ID="experiment-$$"
+UNKNOWN_ID="unknown-$$"
 REPO="$(mktemp -d)"
-git -C "$REPO" init -q
-: > "$REPO/f.txt"
-git -C "$REPO" add f.txt >/dev/null 2>&1
-git -C "$REPO" -c user.email=t@t -c user.name=t commit -qm init >/dev/null 2>&1
-REPO_WIN="$(cygpath -m "$REPO")"
-
+native_path() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"
+  elif command -v wslpath >/dev/null 2>&1; then wslpath -w "$1"
+  else printf '%s\n' "$1"
+  fi
+}
+REPO_WIN="$(native_path "$REPO")"
+PROFILE_NATIVE="$(native_path "$PROFILE_DIR")"
 fail=0
 
 cleanup() {
-  rm -f "$STATE_DIR/$SID_FOREMAN.json" "$STATE_DIR/$SID_PLANNING.json" "$STATE_DIR/$SID_EXP.json"
+  jq -cn --arg sid "$SID" '{hook_event_name:"SessionEnd",session_id:$sid}' | "$WARD_BIN" end-session >/dev/null 2>&1 || true
   rm -rf "$REPO"
 }
 trap cleanup EXIT
 
-event() { # tool, command, sid
-  printf '{"hook_event_name":"PreToolUse","tool_name":"%s","tool_input":{"command":"%s"},"session_id":"%s","cwd":"%s"}' \
-    "$1" "$2" "$3" "$REPO_WIN"
+git -C "$REPO" init -q
+: > "$REPO/f.txt"
+git -C "$REPO" add f.txt >/dev/null 2>&1
+git -C "$REPO" -c user.email=t@t -c user.name=t commit -qm init >/dev/null 2>&1
+
+event() { # tool, command, agent id, agent type, file path
+  jq -cn \
+    --arg tool "$1" --arg command "$2" --arg sid "$SID" \
+    --arg cwd "$REPO_WIN" --arg agent "$3" --arg type "$4" --arg path "$5" \
+    '{hook_event_name:"PreToolUse",tool_name:$tool,
+      tool_input:({command:$command} + (if $path == "" then {} else {file_path:$path} end)),
+      session_id:$sid,cwd:$cwd}
+      + (if $agent == "" then {} else {agent_id:$agent} end)
+      + (if $type == "" then {} else {agent_type:$type} end)'
 }
 
-run_case() { # desc, tool, command, sid, needle, expect(DENY|ALLOW)
-  local desc="$1" tool="$2" cmd="$3" sid="$4" needle="$5" expect="$6" out got
-  out="$(event "$tool" "$cmd" "$sid" | "$WARD_BIN" eval -v 2>/dev/null)"
+start_role() { # agent id, agent type
+  jq -cn --arg sid "$SID" --arg agent "$1" --arg type "$2" \
+    '{hook_event_name:"SubagentStart",session_id:$sid,agent_id:$agent,agent_type:$type}' |
+    CLAUDE_PLUGIN_ROOT="$ROOT/plugins/protocols" WARD_BIN="$WARD_BIN" bash "$ROLE_HOOK" >/dev/null
+}
+
+run_case() { # description, tool, command, agent id, agent type, path, expected
+  local desc="$1" out got
+  out="$(event "$2" "$3" "$4" "$5" "$6" | "$WARD_BIN" eval -v 2>&1)"
   got="ALLOW"
-  if printf '%s' "$out" | grep -qF "$needle"; then got="DENY"; fi
-  echo "=== $desc"
-  echo "    tool/cmd: $tool $cmd"
-  echo "    session : $sid"
-  echo "    expected: $expect   got: $got"
-  echo "    stdout  : $out"
-  if [ "$got" != "$expect" ]; then echo "    RESULT  : MISMATCH"; fail=1; else echo "    RESULT  : OK"; fi
-  echo
+  if printf '%s' "$out" | grep -q 'permissionDecision.*deny'; then got="DENY"; fi
+  printf '=== %s\n    expected: %s   got: %s\n' "$desc" "$7" "$got"
+  if [ "$got" != "$7" ]; then
+    printf '    stdout: %s\n    RESULT: MISMATCH\n' "$out"
+    fail=1
+  else
+    echo "    RESULT: OK"
+  fi
 }
 
-echo "### WARD_RULES_PATH is: '${WARD_RULES_PATH:-<UNSET>}'  (must be UNSET)"
-echo
-
-echo "### 1. Install protocols-gates profile from repo"
-"$WARD_BIN" install-profile "$PROFILE_DIR"
-echo
-
-echo "### ward list-profiles (protocols-gates must appear)"
-"$WARD_BIN" list-profiles
-echo
-
-echo "### ward validate (compile effective installed ruleset, 0 errors expected)"
+unset WARD_RULES_PATH WARD_SESSION WARD_ACTOR_ID
+"$WARD_BIN" validate-profile "$PROFILE_NATIVE"
+"$WARD_BIN" install-profile "$PROFILE_NATIVE"
 "$WARD_BIN" validate
-echo
+"$WARD_BIN" set foreman --session "$SID" >/dev/null
 
-echo "### Set phases on THROWAWAY sessions only (never the live session)"
-"$WARD_BIN" set foreman          --session "$SID_FOREMAN"  >/dev/null
-"$WARD_BIN" set planning         --session "$SID_PLANNING" >/dev/null
-"$WARD_BIN" set experiment-worker --session "$SID_EXP"     >/dev/null
-echo
+start_role "$SCOUT_ID" scout
+start_role "$EXP_ID" experiment-worker
+if start_role "$UNKNOWN_ID" general-purpose 2>/dev/null; then
+  echo "unknown role unexpectedly initialized"
+  fail=1
+fi
 
-# THE PROOF: foreman-phase Bash denies with WARD_RULES_PATH unset.
-run_case "foreman + Bash ls (THE PROOF)" "Bash" "ls" "$SID_FOREMAN" \
-  "Foreman protocol active" "DENY"
-run_case "planning + Bash ls (phase-scoped, not blanket)" "Bash" "ls" "$SID_PLANNING" \
-  "Foreman protocol active" "ALLOW"
-run_case "experiment-worker + git push" "Bash" "git push" "$SID_EXP" \
-  "Experiment protocol active" "DENY"
+run_case "manager Bash denied" Bash "git status" "" "" "" DENY
+run_case "manager Edit denied" Edit "" "" "" "$REPO_WIN/source.txt" DENY
+run_case "manager non-prompt Write denied" Write "" "" "" "$REPO_WIN/report.md" DENY
+run_case "manager Task dispatch allowed" Task "" "" "" "" ALLOW
+run_case "manager Codex dispatch allowed" Bash "codex exec review" "" "" "" ALLOW
+run_case "scout Bash allowed" Bash "git status" "$SCOUT_ID" scout "" ALLOW
+run_case "scout report Write allowed" Write "" "$SCOUT_ID" scout "$REPO_WIN/reports/scout.md" ALLOW
+run_case "experiment commit allowed" Bash "git commit -m fixture" "$EXP_ID" experiment-worker "" ALLOW
+run_case "experiment promotion denied" Bash "git push" "$EXP_ID" experiment-worker "" DENY
+run_case "experiment evaluator Write denied" Write "" "$EXP_ID" experiment-worker "$REPO_WIN/tests/gold.txt" DENY
+run_case "uninitialized Bash denied" Bash "git status" "$UNKNOWN_ID" general-purpose "" DENY
+run_case "uninitialized Edit denied" Edit "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/source.txt" DENY
+run_case "uninitialized Write denied" Write "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/report.md" DENY
+run_case "uninitialized native Read allowed" Read "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/prompt.md" ALLOW
+
+jq -cn --arg sid "$SID" --arg agent "$SCOUT_ID" \
+  '{hook_event_name:"SubagentStop",session_id:$sid,agent_id:$agent}' | "$WARD_BIN" end-actor >/dev/null
+run_case "manager remains foreman after scout stop" Bash "git status" "" "" "" DENY
+run_case "experiment survives scout stop" Bash "git push" "$EXP_ID" experiment-worker "" DENY
+
+jq -cn --arg sid "$SID" --arg agent "$EXP_ID" \
+  '{hook_event_name:"SubagentStop",session_id:$sid,agent_id:$agent}' | "$WARD_BIN" end-actor >/dev/null
+run_case "manager remains foreman after all workers stop" Bash "git status" "" "" "" DENY
 
 if [ "$fail" -eq 0 ]; then
-  echo "ALL PROFILE VERIFICATION CASES PASSED"
+  echo "ALL ACTOR-SCOPED PROFILE CASES PASSED"
 else
-  echo "PROFILE VERIFICATION FAILURE"
+  echo "ACTOR-SCOPED PROFILE FAILURE"
 fi
 exit "$fail"

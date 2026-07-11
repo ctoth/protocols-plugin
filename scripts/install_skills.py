@@ -27,6 +27,14 @@ from pathlib import Path
 
 MARKER_FILENAME = ".protocols-plugin-install.json"
 DEFAULT_PLATFORMS = ("codex", "claude", "gemini")
+REQUIRED_WARD_REVISION = "fb526ae936ce4715256d23c277ddec448359c598"
+REQUIRED_PROTOCOLS_VERSION = "0.3.0"
+REQUIRED_WARD_HOOKS = {
+    "PreToolUse": "eval",
+    "SubagentStart": "start-actor",
+    "SubagentStop": "end-actor",
+    "SessionEnd": "end-session",
+}
 TOOLING_REQUIREMENTS = {
     "uv": {
         "required": True,
@@ -34,9 +42,14 @@ TOOLING_REQUIREMENTS = {
         "skills": ["all"],
     },
     "ward": {
-        "required": False,
-        "reason": "mechanical enforcement for restricted Claude protocols",
-        "skills": ["foreman", "adversary", "researcher"],
+        "required": True,
+        "reason": "actor-scoped mechanical enforcement for restricted protocols",
+        "skills": ["foreman", "campaign", "experiment", "adversary", "researcher"],
+    },
+    "jq": {
+        "required": True,
+        "reason": "safe Claude SubagentStart role parsing",
+        "skills": ["foreman", "campaign", "experiment", "adversary", "researcher"],
     },
 }
 
@@ -204,6 +217,116 @@ def list_claude_plugins() -> list[dict[str, str]]:
     result = run_cli(claude_cli_cmd("plugin", "list"))
     ensure_success(result, "claude plugin list")
     return parse_claude_plugin_list(result.stdout)
+
+
+def installed_ward_hook_commands() -> dict[str, list[str]]:
+    settings_path = Path.home() / ".claude" / "settings.json"
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    commands: dict[str, list[str]] = {}
+    hooks = settings.get("hooks", {})
+    if not isinstance(hooks, dict):
+        return commands
+    for event_name, groups in hooks.items():
+        if not isinstance(event_name, str) or not isinstance(groups, list):
+            continue
+        event_commands: list[str] = []
+        for group in groups:
+            nested = group.get("hooks", []) if isinstance(group, dict) else []
+            if not isinstance(nested, list):
+                continue
+            for hook in nested:
+                command = hook.get("command") if isinstance(hook, dict) else None
+                if isinstance(command, str):
+                    event_commands.append(command)
+        commands[event_name] = event_commands
+    return commands
+
+
+def check_ward_compatibility(ward_path: str) -> tuple[list[str], list[str]]:
+    failures: list[str] = []
+    details: list[str] = []
+
+    for args, required_text in (
+        (("start-actor", "--help"), "uninitialized phase"),
+        (("set", "--help"), "--hook-input"),
+        (("end-actor", "--help"), "Delete one actor"),
+        (("end-session", "--help"), "session family"),
+    ):
+        result = run_cli([ward_path, *args])
+        output = format_cli_output(result)
+        if result.returncode != 0 or required_text.lower() not in output.lower():
+            failures.append(f"Ward lacks required capability: {' '.join(args)}")
+
+    go_path = shutil.which("go")
+    if go_path is None:
+        failures.append("Go is required to verify the installed Ward build revision")
+    else:
+        result = run_cli([go_path, "version", "-m", ward_path])
+        output = format_cli_output(result)
+        revision_match = re.search(r"build\s+vcs\.revision=([0-9a-f]{40})", output)
+        modified_match = re.search(r"build\s+vcs\.modified=(\w+)", output)
+        revision = revision_match.group(1) if revision_match else "unknown"
+        details.append(f"Ward revision: {revision}")
+        if revision != REQUIRED_WARD_REVISION:
+            failures.append(
+                f"Ward revision {revision} is incompatible; required {REQUIRED_WARD_REVISION}"
+            )
+        if modified_match is None or modified_match.group(1) != "false":
+            failures.append("Ward binary must be built from a clean committed tree")
+
+    profiles = run_cli([ward_path, "list-profiles"])
+    profile_output = format_cli_output(profiles)
+    expected_profile = f"protocols-gates\t{REQUIRED_PROTOCOLS_VERSION}"
+    if profiles.returncode != 0 or expected_profile not in profile_output:
+        failures.append(
+            "Installed protocols-gates profile is missing or incompatible; "
+            f"required {REQUIRED_PROTOCOLS_VERSION}"
+        )
+
+    installed_hooks = installed_ward_hook_commands()
+    for event_name, subcommand in REQUIRED_WARD_HOOKS.items():
+        event_commands = installed_hooks.get(event_name, [])
+        if not any(
+            re.search(rf"(?:^|[/\\])ward(?:\.exe)?\s+{re.escape(subcommand)}(?:\s|$)", command)
+            for command in event_commands
+        ):
+            failures.append(
+                f"Missing Ward {event_name} hook for `{subcommand}`; run `ward install`"
+            )
+
+    return failures, details
+
+
+def check_claude_plugin_compatibility(
+    entries: list[dict[str, str]], marketplace: ClaudeMarketplace
+) -> list[str]:
+    failures: list[str] = []
+    for plugin in marketplace.plugins:
+        plugin_id = f"{plugin.name}@{marketplace.name}"
+        entry = next(
+            (
+                candidate
+                for candidate in entries
+                if candidate.get("plugin") == plugin_id
+                and candidate.get("scope", "").lower() == "user"
+            ),
+            None,
+        )
+        if entry is None:
+            failures.append(f"Claude plugin {plugin_id} is not installed at user scope")
+            continue
+        if entry.get("version") != REQUIRED_PROTOCOLS_VERSION:
+            failures.append(
+                f"Claude plugin {plugin_id} is {entry.get('version', 'unknown')}; "
+                f"required {REQUIRED_PROTOCOLS_VERSION}"
+            )
+        if "enabled" not in entry.get("status", "").lower():
+            failures.append(f"Claude plugin {plugin_id} is not enabled")
+    return failures
 
 
 def claude_plugin_installed(
@@ -427,11 +550,13 @@ def run_doctor(skills: list[Skill]) -> int:
 
     print("\nTooling:")
     failures = 0
+    found_tools: dict[str, str | None] = {}
     for tool, meta in TOOLING_REQUIREMENTS.items():
         if tool == "python":
             found = sys.executable
         else:
             found = shutil.which(tool)
+        found_tools[tool] = found
         status = "OK" if found else ("MISSING" if meta["required"] else "WARN")
         skills_text = ", ".join(meta["skills"])
         print(
@@ -444,11 +569,54 @@ def run_doctor(skills: list[Skill]) -> int:
         elif meta["required"]:
             failures += 1
 
+    print("\nWard compatibility:")
+    ward_path = found_tools.get("ward")
+    if ward_path:
+        ward_failures, ward_details = check_ward_compatibility(ward_path)
+        for detail in ward_details:
+            print(f"  - {detail}")
+        if ward_failures:
+            for failure in ward_failures:
+                print(f"  - FAIL: {failure}")
+            failures += len(ward_failures)
+        else:
+            print("  - OK: actor scope, lifecycle hooks, build revision, and profile")
+    else:
+        print("  - FAIL: Ward executable unavailable")
+
     claude_path = shutil.which("claude")
-    status = "OK" if claude_path else "WARN"
+    status = "OK" if claude_path else "MISSING"
     print("  - claude: " + status + " | native marketplace install path | affects: claude")
     if claude_path:
         print(f"      {claude_path}")
+        try:
+            claude_failures = check_claude_plugin_compatibility(
+                list_claude_plugins(), marketplace
+            )
+        except RuntimeError as error:
+            claude_failures = [str(error)]
+        if claude_failures:
+            for failure in claude_failures:
+                print(f"  - FAIL: {failure}")
+            failures += len(claude_failures)
+        else:
+            print(f"  - OK: Claude plugin version {REQUIRED_PROTOCOLS_VERSION}")
+    else:
+        failures += 1
+
+    manifest_path = root / "plugins" / "protocols" / ".claude-plugin" / "plugin.json"
+    profile_path = root / "plugins" / "protocols" / "ward-profile" / "profile.yaml"
+    manifest_version = json.loads(manifest_path.read_text(encoding="utf-8")).get("version")
+    profile_match = re.search(
+        r"^version:\s*(\S+)", profile_path.read_text(encoding="utf-8"), re.MULTILINE
+    )
+    profile_version = profile_match.group(1) if profile_match else None
+    if manifest_version != REQUIRED_PROTOCOLS_VERSION or profile_version != REQUIRED_PROTOCOLS_VERSION:
+        print(
+            "  - FAIL: source plugin/profile versions are incoherent "
+            f"({manifest_version}, {profile_version}; required {REQUIRED_PROTOCOLS_VERSION})"
+        )
+        failures += 1
 
     print("\nTarget roots:")
     for platform_name in DEFAULT_PLATFORMS:

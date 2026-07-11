@@ -4,7 +4,7 @@ Agent behavioral protocols for Claude Code, Codex CLI, and Gemini CLI, with mech
 
 ## What This Does
 
-Provides 13 behavioral protocol skills that define operational modes for Claude Code, Codex CLI, and Gemini CLI agents. Each protocol constrains agent behavior — what tools are available, what workflow to follow, what the agent's role is.
+Provides 14 behavioral protocol skills that define operational modes for Claude Code, Codex CLI, and Gemini CLI agents. Each protocol constrains agent behavior — what tools are available, what workflow to follow, what the agent's role is.
 
 Protocols that restrict tools (foreman, adversary, researcher, experiment) include ward gate rules that mechanically enforce those restrictions at the PreToolUse hook level, preventing accidental violations.
 
@@ -32,10 +32,11 @@ their user skill roots.
 
 ## Agents
 
-The plugin ships the four gauntlet roles as **Claude-native** tool-scoped agents in
+The plugin ships five **Claude-native** tool-scoped agents in
 `plugins/protocols/agents/`. Dispatch them via the Task tool with
-`subagent_type: scout` / `coder` / `analyst` / `verifier`. Their tool restriction is
-enforced by the agent frontmatter itself (`tools` / `disallowedTools`), independent of ward.
+an explicit supported `subagent_type`. Their tool restriction is enforced by
+agent frontmatter, while Ward keeps each Task actor's protocol phase and mutable
+guard state independent from the main manager and sibling workers.
 
 | Agent | `subagent_type` | Tools | Role |
 |-------|-----------------|-------|------|
@@ -43,6 +44,7 @@ enforced by the agent frontmatter itself (`tools` / `disallowedTools`), independ
 | **coder** | `coder` | Read, Glob, Grep, Bash, Edit, Write | Implement the plan with full TDD; commit own work |
 | **analyst** | `analyst` | Read, Glob, Grep, Bash, Write (no Edit) | Find problems — edge cases, security, races; do not fix |
 | **verifier** | `verifier` | Read, Glob, Grep, Bash, Write (no Edit) | Gate the merge; default NO-MERGE |
+| **experiment worker** | `experiment-worker` | Read, Glob, Grep, Bash, Edit, Write | Run one isolated experiment; never promote itself |
 
 These agents are Claude-only. Codex and Gemini do not load Claude plugin agents — they
 consume the equivalent doctrine from the `gauntlet` and `subagent` skills' prose.
@@ -55,9 +57,29 @@ the plugin is installed via `claude plugin install`, so no manifest declaration 
 
 Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mechanical enforcement:
 
-1. **SessionStart hook** installs/updates this plugin's `protocols-gates` ward profile (from `plugins/protocols/ward-profile/`) into `~/.ward/profiles/`, so the gates load for the `ward eval` hook on every session — independent of environment
-2. When a protocol is activated (e.g., `ward set foreman`), ward's `session.phase` is set
-3. Ward gate rules fire on every tool call, denying tools that the protocol forbids
+1. Ward's lifecycle hooks create/delete actor records and session families.
+2. This plugin's **SessionStart** hook validates and installs the bundled
+   `protocols-gates` profile; failure is surfaced instead of silently disabling
+   enforcement.
+3. The main manager alone runs `ward set foreman`, which changes actor `main`.
+4. This plugin's **SubagentStart** hook maps supported Claude `agent_type`
+   values to actor-local phases. Unknown/generic Task types remain
+   `uninitialized`, where Bash/Edit/Write fail closed while native Read remains
+   available for diagnosis.
+5. Ward gate rules evaluate each actor's independent phase, history, signals,
+   and path ownership on every tool call.
+
+The exact Task mapping is `scout -> scout`, `coder -> coder`, `analyst ->
+analyst`, `verifier -> verifier`, `researcher -> researcher`, `adversary ->
+adversary`, and `experiment-worker -> experiment-worker`. A physical prompt
+and its Task launch parameter must both name the same supported type. Task
+workers never run a session-global transition.
+
+Direct Codex/Gemini workers are separate: launch each with a unique
+`WARD_SESSION` and `WARD_ACTOR_ID`, then have that CLI worker run `ward set
+<phase>`. Hosts that cannot provide either a real Task `agent_id` or an
+explicit `WARD_ACTOR_ID` cannot safely run concurrent mechanically enforced
+roles.
 
 ### Gate Rules
 
@@ -67,6 +89,7 @@ Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mech
 | `adversary-gate.yaml` | `adversary` | Edit, Write, Bash |
 | `researcher-gate.yaml` | `researcher` | Edit (Write allowed for reports) |
 | `experiment-gate.yaml` | `experiment-worker` | Integration-branch moves — `git push`, `merge`, `rebase`, `cherry-pick`, `pull`, `switch`/`checkout` (commit, add, branch, tag stay allowed; override: `ward allow experiment-promote`) |
+| `uninitialized-worker-gate.yaml` | `uninitialized` | Bash, Edit, Write until a supported Task role is initialized |
 
 ## Installation
 
@@ -110,11 +133,51 @@ uv run scripts/install_skills.py uninstall
 marketplace add/install` flow under the hood. Omitting `--platform` installs all
 supported targets.
 
-## Requirements
+## Required compatibility set
 
-- [ward](https://github.com/ctoth/ward) must be installed and configured as a PreToolUse hook
-- Ward must support installable profiles (`ward install-profile`); the SessionStart hook installs the `protocols-gates` profile
+- Protocols Claude plugin `0.3.0`
+- `protocols-gates` Ward profile `0.3.0`
+- Ward revision `fb526ae936ce4715256d23c277ddec448359c598`, built from a clean committed tree
+- Ward lifecycle hooks: `PreToolUse eval`, `SubagentStart start-actor`,
+  `SubagentStop end-actor`, and `SessionEnd end-session`, each installed by
+  `ward install`
+- `jq` for safe SubagentStart role parsing
 - `uv` is required for the script-based installer
+
+`uv run scripts/install_skills.py doctor` fails if any Ward capability,
+revision, lifecycle hook, profile version, or installed Claude plugin version
+is missing or stale. A coherent install is proved with:
+
+```bash
+ward validate-profile ./plugins/protocols/ward-profile
+ward install-profile ./plugins/protocols/ward-profile
+ward list-profiles
+ward validate
+claude plugin update protocols@protocols-marketplace
+claude plugin list
+uv run scripts/install_skills.py doctor
+```
+
+## Verification
+
+The deterministic full repository gate is:
+
+```bash
+bash scripts/verify.sh
+```
+
+The release acceptance gate is deliberately separate because it launches paid
+real Claude agents. It creates a disposable Git fixture, runs a real foreman
+parent with parallel `scout` and `experiment-worker` Task actors, captures hook
+events, checks distinct actor IDs and overlap, verifies nonce-bound reports and
+the experiment commit/denials, and checks SessionEnd cleanup:
+
+```bash
+bash scripts/ward_actor_acceptance.sh
+```
+
+Synthetic profile smoke tests are supporting evidence; they do not replace
+this real parent/parallel-worker gate.
 
 ## Usage
 

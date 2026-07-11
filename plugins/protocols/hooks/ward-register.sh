@@ -9,21 +9,48 @@
 # profile puts the rules in ~/.ward/profiles/, which ward loads for every
 # session regardless of environment — exactly how core-safety loads.
 #
-# Idempotent and fast: it only reinstalls when the bundled version differs from
-# the installed one (a local-dir copy of a handful of small YAML files), and it
-# never fails the hook if ward is missing.
+# Idempotent and fail-closed: an absent/incompatible Ward or a profile install
+# failure is surfaced to SessionStart instead of silently disabling enforcement.
+
+set -euo pipefail
 
 PROFILE_DIR="${CLAUDE_PLUGIN_ROOT}/ward-profile"
-
-# ward not installed → no-op, do not fail the hook.
-command -v ward >/dev/null 2>&1 || exit 0
-[ -f "$PROFILE_DIR/profile.yaml" ] || exit 0
-
-want="$(grep -m1 '^version:' "$PROFILE_DIR/profile.yaml" | awk '{print $2}')"
-have="$(ward list-profiles 2>/dev/null | awk -F'\t' '$1=="protocols-gates"{print $2}')"
-
-if [ "$want" != "$have" ]; then
-    ward install-profile "$PROFILE_DIR" >/dev/null 2>&1 || true
+if [ -z "${WARD_BIN:-}" ] && command -v ward.exe >/dev/null 2>&1; then
+    WARD_BIN=ward.exe
+else
+    WARD_BIN="${WARD_BIN:-ward}"
 fi
 
-exit 0
+command -v "$WARD_BIN" >/dev/null 2>&1 || {
+    echo "protocols: Ward is required but was not found" >&2
+    exit 1
+}
+[ -f "$PROFILE_DIR/profile.yaml" ] || {
+    echo "protocols: missing bundled Ward profile: $PROFILE_DIR/profile.yaml" >&2
+    exit 1
+}
+
+"$WARD_BIN" start-actor --help 2>&1 | grep -q "uninitialized phase" || {
+    echo "protocols: installed Ward lacks actor-scoped SubagentStart support" >&2
+    exit 1
+}
+"$WARD_BIN" set --help 2>&1 | grep -q -- "--hook-input" || {
+    echo "protocols: installed Ward lacks actor-scoped hook initialization" >&2
+    exit 1
+}
+
+"$WARD_BIN" validate-profile "$PROFILE_DIR" >/dev/null
+
+want="$(grep -m1 '^version:' "$PROFILE_DIR/profile.yaml" | awk '{print $2}')"
+have="$("$WARD_BIN" list-profiles 2>/dev/null | awk -F'\t' '$1=="protocols-gates"{print $2}')"
+
+if [ "$want" != "$have" ]; then
+    "$WARD_BIN" install-profile "$PROFILE_DIR" >/dev/null
+fi
+
+installed="$("$WARD_BIN" list-profiles | awk -F'\t' '$1=="protocols-gates"{print $2}')"
+[ "$installed" = "$want" ] || {
+    echo "protocols: Ward profile version mismatch (want $want, have ${installed:-missing})" >&2
+    exit 1
+}
+"$WARD_BIN" validate >/dev/null

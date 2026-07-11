@@ -16,7 +16,9 @@ allowed-tools:
   - Bash
 ---
 
-**First:** Run `ward set foreman` to activate enforcement for this session.
+**First:** Run `ward set foreman`. This sets only the main actor's Ward phase.
+It never initializes a Task worker or CLI worker. Each worker must have its own
+actor record as described below.
 
 # Foreman Protocol
 
@@ -47,7 +49,12 @@ Ask: "Is this execution or coordination?"
 
 **"Explain X" or "tell me about Y" = dispatch a scout.** Frustration or urgency is not permission to break protocol.
 
-**Dispatch the tool-scoped protocol role agents** — `subagent_type: scout`, `coder`, `analyst`, or `verifier` — for their roles. They ship with this plugin, have `Write`, and produce reports. Use `subagent_type: general-purpose` for work that doesn't fit a role. The real constraint: NEVER use READ-ONLY agent types (Explore, Plan) as workers — they cannot write report files and will fail.
+**Dispatch an explicit supported protocol role agent** — `subagent_type: scout`,
+`coder`, `analyst`, `verifier`, or `experiment-worker`. The plugin's
+`SubagentStart` hook maps that exact type to the same actor-local Ward phase.
+Never dispatch `general-purpose`, Explore, Plan, or another generic type under
+this protocol: unknown Task types remain `uninitialized` and Ward denies their
+Bash/Edit/Write until they are relaunched with a supported role.
 
 ## Structure
 
@@ -146,8 +153,14 @@ same way it dispatches a claude agent — the mechanism is just the CLI instead
 of the `Task` tool. Run it directly:
 
 ```
-codex exec --dangerously-bypass-approvals-and-sandbox "Read prompts/X.md and write report to reports/X-report.md"
+WARD_SESSION=cli-X WARD_ACTOR_ID=coder-X codex exec --dangerously-bypass-approvals-and-sandbox "Read prompts/X.md, run ward set coder, and write report to reports/X-report.md"
 ```
+
+Every direct CLI launch gets a unique `WARD_SESSION` and `WARD_ACTOR_ID`.
+The physical prompt and CLI prompt must both name the same supported phase and
+tell the worker to run `ward set <phase>` inside that environment. Codex and
+Gemini hooks then resolve the same actor record as the worker's command-side
+transition. Do not reuse the main Claude session or actor identity.
 
 Running a CLI agent is **dispatch — coordination, not execution.** It is the
 shell equivalent of the `Task` tool, and it is NOT the "Bash for code

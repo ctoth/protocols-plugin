@@ -30,7 +30,12 @@ agent-type rule (see "CRITICAL: Agent Type") apply ONLY to claude Task agents.
 
 ## CRITICAL: Agent Type
 
-Dispatch a **write-capable** agent type. This plugin ships four tool-scoped role agents — `subagent_type: scout`, `coder`, `analyst`, `verifier` — that each have `Write` and are built to produce reports; use them for their gauntlet roles. Use `subagent_type: general-purpose` for work that doesn't fit a role.
+Dispatch an explicit supported role: `subagent_type: scout`, `coder`,
+`analyst`, `verifier`, or `experiment-worker`. The plugin maps Task types
+`scout`, `coder`, `analyst`, `verifier`, `researcher`, `adversary`, and
+`experiment-worker` to identically named actor-local Ward phases. Unknown and
+generic types remain `uninitialized`; Ward allows native Read for diagnosis but
+denies Bash/Edit/Write. Never use `general-purpose` as a fallback.
 
 NEVER use READ-ONLY agent types (Explore, Plan, or similar) as workers, even in planning mode — they cannot write report files to `./reports/` and will fail. Since subagents must write reports, the type you pick MUST be write-capable.
 
@@ -61,7 +66,13 @@ Every subagent prompt MUST start with this line before anything else:
 
 > **You are a WORKER agent launched via the Task tool. Execute this task directly. Do NOT read foreman.md. Do NOT coordinate — DO the work yourself.**
 
-This goes at the very top of every prompt file AND in the Task tool's prompt parameter. Non-negotiable.
+Immediately after that line, name the exact Task type and actor phase:
+
+> **Ward role: launch with `subagent_type: coder`. The SubagentStart hook initializes only this Task actor to phase `coder`; do not run `ward set`.**
+
+Both lines go at the very top of every physical prompt AND in the Task tool's
+prompt parameter. Replace `coder` with the selected supported role. This
+duplication is non-negotiable.
 
 ## Prompt File Template
 
@@ -69,6 +80,7 @@ Write to `./prompts/{task-name}.md`:
 
 ```markdown
 **You are a WORKER agent launched via the Task tool. Execute this task directly. Do NOT read foreman.md. Do NOT coordinate — DO the work yourself.**
+**Ward role: launch with `subagent_type: coder`. The SubagentStart hook initializes only this Task actor to phase `coder`; do not run `ward set`.**
 
 # Task: [Clear Title]
 
@@ -106,6 +118,7 @@ If Edit/Write fails with "file unexpectedly modified":
 
 In Task tool message:
 ```
+**Ward role: launch with `subagent_type: coder`. The SubagentStart hook initializes only this Task actor to phase `coder`; do not run `ward set`.**
 @prompts/{task-name}.md
 
 Execute this task. Write your report to ./reports/{task-name}-report.md when done.
@@ -139,6 +152,7 @@ This is not optional. This goes in every scout prompt. Every single one.
 ## Checklist Before Dispatch
 
 - [ ] Worker identity declaration at top of prompt (both file AND Task tool prompt param)
+- [ ] Exact supported `subagent_type` and matching actor phase stated in both places
 - [ ] Prompt written to physical file
 - [ ] Single clear deliverable
 - [ ] Exact file paths included
@@ -156,10 +170,12 @@ This is not optional. This goes in every scout prompt. Every single one.
       switching to, merging into, rebasing, cherry-picking onto, pushing, or
       otherwise moving the integration branch. Worker may recommend promotion
       only; a separate verifier/foreman/parent must independently verify and
-      promote. The prompt must also instruct the worker to run
-      `ward set experiment-worker` right after creating the experiment branch,
-      so the integration-branch ban is mechanically enforced by the
-      `experiment-gate` ward rule, not merely stated in prose.
+      promote. A Claude Task experiment must use
+      `subagent_type: experiment-worker`; its dedicated branch/worktree exists
+      before dispatch and SubagentStart initializes only that Task actor. It
+      must not run `ward set`. A direct Codex/Gemini worker instead launches
+      with unique `WARD_SESSION` and `WARD_ACTOR_ID` values and runs
+      `ward set experiment-worker` after entering its already-created branch.
 
 ## CRITICAL: Parallel Swarm Awareness
 

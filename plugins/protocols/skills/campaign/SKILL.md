@@ -18,7 +18,7 @@ toward evidence: many ideas get a cheap look, few get a full experiment, and
 every death is recorded with its reason so the search never revisits it.
 
 The campaign manager coordinates and never implements — run `ward set foreman`
-and follow the foreman protocol for all dispatch. Workers run the experiment
+for the main actor and follow the foreman protocol for all dispatch. Workers run the experiment
 protocol; the manager runs the portfolio. The foreman gate blocks the manager
 from writing or committing anything outside `prompts/` and `notes-*` — so the
 ledger, like all durable artifacts, is written and committed by dispatched
@@ -31,8 +31,12 @@ a ledger update; a worker types it.
   dispatches workers, prunes. Never edits source, never runs benchmarks,
   never writes the ledger directly — every ledger create/update is included
   in a dispatched worker's prompt (the worker appends its line and commits).
-- **Experiment workers**: one hypothesis each, on the experiment protocol,
-  under `ward set experiment-worker`. Never promote themselves.
+- **Experiment workers**: one hypothesis each, dispatched explicitly as
+  `subagent_type: experiment-worker` into a dedicated branch/worktree prepared
+  before Task launch. SubagentStart sets only that worker actor's
+  `experiment-worker` phase; the worker never runs a session-global
+  transition and never promotes itself. Direct CLI workers instead receive a
+  unique `WARD_SESSION` plus `WARD_ACTOR_ID` and set only that actor phase.
 - **Verifier**: independent promotion gate per the experiment protocol,
   including the adversary pass.
 

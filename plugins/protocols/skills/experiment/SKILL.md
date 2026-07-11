@@ -188,10 +188,16 @@ Every experiment must have:
 4. Run the baseline: the preplanned seeds/instances, with instrumentation
    enabled, recording per-run results and the spread. This is the noise floor
    every later claim is judged against.
-5. Create a dedicated experiment branch.
-6. Run `ward set experiment-worker` to activate enforcement for the worker
-   session. Do this after the branch exists (branch creation must happen first)
-   and before making any changes — it mechanically blocks the worker from
+5. Enter a dedicated experiment branch. For a Claude Task worker, the
+   dispatcher must prepare the branch/worktree before launching the explicit
+   `experiment-worker` agent because its Ward restrictions are active from
+   SubagentStart. For a direct Codex/Gemini worker, create/enter the branch
+   before launching the CLI.
+6. Confirm actor-local enforcement. A Claude Task worker is already in phase
+   `experiment-worker` and must not run `ward set`. A direct CLI launch must
+   have unique `WARD_SESSION` and `WARD_ACTOR_ID` values and must run
+   `ward set experiment-worker` before changes. That command changes only the
+   CLI actor record. The phase mechanically blocks the worker from
    pushing, merging, rebasing, cherry-picking, or switching the integration
    branch, and blocks Edit/Write to common evaluator directories as a
    tripwire. Bash-mediated evaluator changes are not gate-blocked; they are

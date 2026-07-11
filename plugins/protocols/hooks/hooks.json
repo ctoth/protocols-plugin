@@ -1,5 +1,5 @@
 {
-  "description": "Register protocol ward rules on session start",
+  "description": "Register actor-scoped protocol Ward rules and initialize Task roles",
   "hooks": {
     "SessionStart": [
       {
@@ -7,6 +7,17 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/ward-register.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/ward-role.sh",
             "timeout": 5
           }
         ]
