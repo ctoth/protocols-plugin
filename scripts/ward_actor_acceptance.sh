@@ -80,6 +80,9 @@ printf '%s\n' \
 set +e
 (
   cd "$FIXTURE"
+  # The harness can be launched from Codex. Do not let that parent's identity
+  # outrank Claude's own process registry during command-side Ward resolution.
+  unset CODEX_THREAD_ID WARD_SESSION WARD_ACTOR_ID
   "$CLAUDE_BIN" -p \
     --plugin-dir "$ROOT/plugins/protocols" \
     --dangerously-skip-permissions \
@@ -121,8 +124,8 @@ check_file "$FIXTURE/reports/experiment-$NONCE.md" "evaluator is sealed"
 check_stream "ACCEPTANCE_PARENT_OK $NONCE"
 check_stream 'SubagentStart'
 check_stream 'SubagentStop'
-check_stream '"agent_type":"protocols:scout"'
-check_stream '"agent_type":"protocols:experiment-worker"'
+check_stream 'subagent_type":"protocols:scout"'
+check_stream 'subagent_type":"protocols:experiment-worker"'
 check_stream 'ward: phase → scout ('
 check_stream 'ward: phase → experiment-worker ('
 check_stream 'Foreman protocol active'
