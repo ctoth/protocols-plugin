@@ -1,7 +1,10 @@
 when: >
   session.phase == "foreman" && (
-    tool in ["Bash", "Edit"] ||
+    tool == "Edit" ||
+    (tool == "Bash" && !("commands" in input
+        && size(input.commands) > 0
+        && input.commands.all(c, c.name in ["codex", "gemini"]))) ||
     (tool == "Write" && !("file_path" in input && (input.file_path.contains("/prompts/") || input.file_path.contains("notes-"))))
   )
 action: deny
-message: "Foreman protocol active. You coordinate, you do not execute. Dispatch a subagent instead. (Write is allowed only to prompts/ and notes-*.md)"
+message: "Foreman protocol active. You coordinate, you do not execute. Dispatch a subagent instead. (Write is allowed only to prompts/ and notes-*.md; Bash is allowed only to dispatch CLI agents: codex, gemini.)"

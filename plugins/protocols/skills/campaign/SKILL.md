@@ -19,12 +19,18 @@ every death is recorded with its reason so the search never revisits it.
 
 The campaign manager coordinates and never implements — run `ward set foreman`
 and follow the foreman protocol for all dispatch. Workers run the experiment
-protocol; the manager runs the portfolio.
+protocol; the manager runs the portfolio. The foreman gate blocks the manager
+from writing or committing anything outside `prompts/` and `notes-*` — so the
+ledger, like all durable artifacts, is written and committed by dispatched
+workers, never by the manager's own hands. The manager decides every word of
+a ledger update; a worker types it.
 
 ## Roles
 
-- **Manager** (you): frames the goal, maintains the ledger, prioritizes,
-  dispatches workers, prunes. Never edits source, never runs benchmarks.
+- **Manager** (you): frames the goal, owns the ledger's content, prioritizes,
+  dispatches workers, prunes. Never edits source, never runs benchmarks,
+  never writes the ledger directly — every ledger create/update is included
+  in a dispatched worker's prompt (the worker appends its line and commits).
 - **Experiment workers**: one hypothesis each, on the experiment protocol,
   under `ward set experiment-worker`. Never promote themselves.
 - **Verifier**: independent promotion gate per the experiment protocol,
@@ -34,7 +40,8 @@ protocol; the manager runs the portfolio.
 
 ### 1. Frame
 
-Commit `experiments/INDEX.md` (the ledger) with:
+Dispatch a worker to create and commit `experiments/INDEX.md` (the ledger)
+with:
 
 - the goal metric: exact command, current baseline as a committed artifact
   (per-seed numbers, median, spread — the noise floor);
@@ -67,7 +74,8 @@ worst half, give survivors a bigger slice, repeat while the budget allows.
   evidence** — it exists to kill ideas cheaply, not to confirm them.
 - Every pruned branch gets a ledger line stating what killed it: the number,
   the profile, the contradicting contract. "Didn't look promising" is not a
-  cause of death.
+  cause of death. Each probe worker's prompt includes the ledger-line duty:
+  append the result to `experiments/INDEX.md` and commit it.
 - Probes must not touch the holdout.
 
 ### 4. Confirm deep
@@ -86,8 +94,8 @@ re-measured on top of the first before promotion.
 
 ### 6. Synthesize
 
-After each round, update the ledger: statuses, causes of death, what the
-profiles now say the dominant cost is, and the honest yield (candidates tried
+After each round, dispatch a ledger update: statuses, causes of death, what
+the profiles now say the dominant cost is, and the honest yield (candidates tried
 vs promoted — expect most to die; a round where everything "worked" is a
 measurement problem, not a triumph). Decide from evidence: another round, a
 pivot to instrumentation, or campaign end. When kill criteria fire, stop —
@@ -127,5 +135,7 @@ Dominant cost after round: [from profile evidence]
 - Touching the holdout during triage or tuning.
 - Pruning without recording the cause of death.
 - The manager "quickly checking" a number itself instead of dispatching.
+- The manager writing or committing the ledger itself — the foreman gate
+  blocks it, and durable artifacts are worker deliverables.
 - Ending a round with no ledger update.
 - Adding one more round after campaign kill criteria have fired.

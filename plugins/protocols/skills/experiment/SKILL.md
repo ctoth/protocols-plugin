@@ -103,12 +103,20 @@ prereg pinned. The known exploit taxonomy is exactly this: tampering with eval
 code, special-casing visible tests, weakening match criteria, fabricating
 intermediate artifacts, and counting a crash as a pass.
 
-- The promotion verifier runs `git diff <prereg-commit> HEAD -- tests/ eval/
-  bench/ benchmarks/` (adjusted to the repo's evaluator paths). Non-empty diff
-  = automatic no-go, whatever the metric says.
+- The authoritative seal is the prereg's pinned evaluator paths plus the
+  promotion verifier's `git diff <prereg-commit> HEAD -- <evaluator paths>`.
+  Non-empty diff = automatic no-go, whatever the metric says. The ward gate
+  that blocks Edit/Write to common evaluator directories (`tests/`, `test/`,
+  `eval/`, `bench/`, `benchmarks/`) is a tripwire, not the seal: it does not
+  cover Bash-mediated edits or evaluator code living elsewhere (a
+  `conftest.py`, scoring code under `src/`, gold data in `fixtures/`). The
+  verifier's diff covers everything the prereg pinned.
 - If the harness itself is wrong or missing instrumentation, that is a
   separate infrastructure task landed and committed **before** preregistration
-  — never a mid-experiment edit.
+  — never a mid-experiment edit. The same goes for new fast-contract tests:
+  commit them before branching. The `ward allow experiment-harness-change`
+  override unseals the tripwire for the rest of the session, so use it only
+  for a change the prereg explicitly names.
 - Scoring is **fail-closed**: a run only counts as PASS when the harness emits
   a parseable result that passes. Exceptions, timeouts, crashes, and missing
   output are FAIL, never "inconclusive, re-run until green".
@@ -125,7 +133,10 @@ wall-clock noise is right-skewed and machine-load dependent.
   pairwise per instance — never candidate-run-vs-remembered-number.
 - Minimum 3 runs per side for a directional signal; 5+ before recommending
   promotion. If the repo's benchmark is too slow for that, say so in the
-  record and shrink the benchmark, don't shrink the run count silently.
+  record and shrink the benchmark, don't shrink the run count silently. If
+  the benchmark genuinely cannot be shrunk, preregister the reduced run count
+  with the justification and widen the required margin to compensate — a
+  sanctioned small-n plan beats a silent one.
 - Wall-clock metrics report **median** (or trimmed mean) and spread, never
   bare mean.
 - A delta is real only when the paired-difference interval excludes zero AND
@@ -149,7 +160,8 @@ Every experiment must have:
   the change — a committed artifact, not a remembered number.
 - **Experiment branch**: isolated from the integration branch.
 - **Fast contracts**: tests or telemetry checks that fail before the full
-  benchmark if the idea is wrong.
+  benchmark if the idea is wrong — committed to the integration branch before
+  the experiment branch exists.
 - **Instrumentation contract**: the reusable telemetry/profiler surface used to
   observe the bottleneck class before changing solver behavior.
 - **Metric gate**: exact command, timeout, pass/fail threshold, seed plan, and
@@ -169,9 +181,10 @@ Every experiment must have:
 
 1. State the literal outcome and active experiment item before each action.
 2. Verify current branch and tracked-file cleanliness.
-3. Verify the required instrumentation exists for the bottleneck class. If it
-   does not, stop: the next task is instrumentation infrastructure, not an
-   experiment.
+3. Verify the required instrumentation AND the fast contracts exist for the
+   bottleneck class. If either is missing, stop: the next task is
+   infrastructure, committed to the integration branch before any experiment
+   branch exists. New test files cannot be added once the evaluator is sealed.
 4. Run the baseline: the preplanned seeds/instances, with instrumentation
    enabled, recording per-run results and the spread. This is the noise floor
    every later claim is judged against.
@@ -180,8 +193,9 @@ Every experiment must have:
    session. Do this after the branch exists (branch creation must happen first)
    and before making any changes — it mechanically blocks the worker from
    pushing, merging, rebasing, cherry-picking, or switching the integration
-   branch, and from editing evaluator paths, so promotion authority and the
-   sealed evaluator stay intact.
+   branch, and blocks Edit/Write to common evaluator directories as a
+   tripwire. Bash-mediated evaluator changes are not gate-blocked; they are
+   caught by the verifier's evaluator-path diff at promotion time.
 7. **Preregister**: write the record file with the frozen fields (hypothesis,
    single variable, primary metric + harness hash, minimum effect, seed plan,
    analysis plan, kill criteria, falsification condition) and commit it.
