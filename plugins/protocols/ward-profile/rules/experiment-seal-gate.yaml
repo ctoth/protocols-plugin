@@ -1,0 +1,12 @@
+when: >
+  session.phase == "experiment-worker"
+  && !("experiment-harness-change" in session.signals)
+  && tool in ["Edit", "Write"]
+  && "file_path" in input
+  && (input.file_path.contains("/tests/")
+      || input.file_path.contains("/test/")
+      || input.file_path.contains("/eval/")
+      || input.file_path.contains("/bench/")
+      || input.file_path.contains("/benchmarks/"))
+action: deny
+message: "Experiment protocol active: the evaluator is sealed. The worker may not modify tests, benchmark harnesses, evaluator scripts, or gold data mid-experiment — the thing being optimized cannot edit the thing doing the measuring. Harness fixes are separate infrastructure work committed BEFORE preregistration. Legitimate override (e.g. adding a new fast contract the prereg names): run `ward allow experiment-harness-change`."

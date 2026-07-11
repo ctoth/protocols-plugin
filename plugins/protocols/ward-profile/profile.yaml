@@ -1,5 +1,5 @@
 name: protocols-gates
-version: 0.1.0
+version: 0.2.0
 description: >
   Phase-gate rules for the protocols plugin. Mechanically enforces the tool
   restrictions of the foreman, adversary, researcher, and experiment protocols
@@ -15,3 +15,4 @@ blocks:
     - adversary-mutate
     - researcher-edit
     - experiment-integration-move
+    - experiment-evaluator-edit
