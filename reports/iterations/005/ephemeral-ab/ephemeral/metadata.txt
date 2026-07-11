@@ -1,0 +1,7 @@
+arm=ephemeral
+codex_args=--ephemeral
+codex_exit=0
+root_thread_id=019f5189-ddb8-7320-aaf9-302919fb6f9b
+ward_family=/tmp/ward/families/5a585b9ad1d092566eb0b9cd3dd33ebaf8220f27a5b9d5de5b266d272995ed40
+gate_opened=true
+family_present_after=true

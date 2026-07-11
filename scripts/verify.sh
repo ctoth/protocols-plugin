@@ -16,6 +16,7 @@ else
 fi
 
 uv run scripts/test_protocols_plugin.py
+uv run scripts/test_codex_native_acceptance.py
 uv run scripts/lint_skill_frontmatter.py
 if command -v wslpath >/dev/null 2>&1; then
   PROFILE_PATH="$(wslpath -w "$ROOT/plugins/protocols/ward-profile")"

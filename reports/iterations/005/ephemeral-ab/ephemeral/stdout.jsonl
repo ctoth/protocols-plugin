@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"019f5189-ddb8-7320-aaf9-302919fb6f9b"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"collab_tool_call","tool":"wait","sender_thread_id":"019f5189-ddb8-7320-aaf9-302919fb6f9b","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"collab_tool_call","tool":"wait","sender_thread_id":"019f5189-ddb8-7320-aaf9-302919fb6f9b","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"completed"}}
+{"type":"item.started","item":{"id":"item_1","type":"collab_tool_call","tool":"wait","sender_thread_id":"019f5189-ddb8-7320-aaf9-302919fb6f9b","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"collab_tool_call","tool":"wait","sender_thread_id":"019f5189-ddb8-7320-aaf9-302919fb6f9b","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"NATIVE_CODEX_EPHEMERAL_AB /root/native_codex_ephemeral_ab"}}
+{"type":"turn.completed","usage":{"input_tokens":97527,"cached_input_tokens":70912,"output_tokens":316,"reasoning_output_tokens":143}}

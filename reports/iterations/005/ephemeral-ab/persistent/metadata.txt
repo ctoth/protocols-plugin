@@ -1,0 +1,7 @@
+arm=persistent
+codex_args=
+codex_exit=0
+root_thread_id=019f518a-c1c4-78e3-a35a-b2ebf8996155
+ward_family=/tmp/ward/families/77b5bf656bcf34833e257ec8c74e8ceabbbe36fcc80421e0f952d555e7ed8a22
+gate_opened=true
+family_present_after=true

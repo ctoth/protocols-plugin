@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"019f518a-c1c4-78e3-a35a-b2ebf8996155"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"collab_tool_call","tool":"wait","sender_thread_id":"019f518a-c1c4-78e3-a35a-b2ebf8996155","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"collab_tool_call","tool":"wait","sender_thread_id":"019f518a-c1c4-78e3-a35a-b2ebf8996155","receiver_thread_ids":[],"prompt":null,"agents_states":{},"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"NATIVE_CODEX_EPHEMERAL_AB /root/native_codex_ephemeral_ab"}}
+{"type":"turn.completed","usage":{"input_tokens":74335,"cached_input_tokens":58624,"output_tokens":210,"reasoning_output_tokens":58}}

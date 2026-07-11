@@ -23,3 +23,10 @@
 - Targets: disabled/modified explicit trust upgrade and active-cache fixture isolation
 - Result: 0 failures in 13 focused contracts; full Git/MSYS gate and live 0.3.2 doctor passed
 - Commits: included in this atomic iteration fix
+
+## 005 - 2026-07-11
+- Start: 1 failed native Codex lifecycle acceptance
+- Target: test-first lifecycle classification and controlled `--ephemeral` A/B
+- Result: 1 native acceptance failure remains; A/B falsified the protocols-owned cause
+- Blocker: Codex 0.144.1 exec JSON omitted spawn/child command items and leaked both exact root Ward families
+- Commits: included in this atomic blocked-iteration record
