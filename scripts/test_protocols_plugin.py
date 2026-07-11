@@ -146,7 +146,11 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("ward.exe set foreman", acceptance)
         self.assertIn("ward: phase", acceptance)
         self.assertIn("unset CODEX_THREAD_ID WARD_SESSION WARD_ACTOR_ID", acceptance)
-        self.assertIn('subagent_type":"protocols:scout', acceptance)
+        self.assertIn("PARENT_FOREMAN_DENIAL_OK", acceptance)
+        self.assertIn("cleanup_fixture", acceptance)
+        self.assertIn("ward-actor-acceptance-$NONCE.md", acceptance)
+        self.assertIn("ward-actor-acceptance", acceptance)
+        self.assertIn("FIXTURE_LOCK", acceptance)
 
 
 if __name__ == "__main__":

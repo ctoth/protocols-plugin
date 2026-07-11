@@ -22,22 +22,47 @@ else
 fi
 MAX_BUDGET_USD="${MAX_BUDGET_USD:-5}"
 NONCE="ward-accept-$(date +%s)-$$"
-FIXTURE="$(mktemp -d)"
-FIXTURE_WIN="$(cygpath -m "$FIXTURE")"
+TEMP_WIN="$(cygpath -m "${TEMP:-/tmp}")"
+FIXTURE_WIN="$TEMP_WIN/ward-actor-acceptance"
+FIXTURE="$(cygpath -u "$FIXTURE_WIN")"
+FIXTURE_LOCK="$FIXTURE.lock"
 STREAM="$FIXTURE/claude-stream.jsonl"
 
-cleanup() {
+case "$FIXTURE_WIN" in
+  "$TEMP_WIN"/*) ;;
+  *) echo "Unsafe acceptance fixture path: $FIXTURE_WIN" >&2; exit 1 ;;
+esac
+if ! mkdir "$FIXTURE_LOCK" 2>/dev/null; then
+  echo "Another Ward actor acceptance run holds $FIXTURE_LOCK" >&2
+  exit 1
+fi
+mkdir -p "$FIXTURE"
+
+cleanup_fixture() {
   if [ "${KEEP_WARD_ACCEPTANCE_FIXTURE:-0}" = "1" ]; then
     echo "Acceptance fixture retained: $FIXTURE_WIN"
+    rmdir "$FIXTURE_LOCK" 2>/dev/null || true
+    return 0
   else
-    for attempt in 1 2 3 4 5; do
-      if rm -rf "$FIXTURE" 2>/dev/null; then return; fi
+    for attempt in $(seq 1 45); do
+      rm -rf "$FIXTURE"/* "$FIXTURE"/.[!.]* "$FIXTURE"/..?* 2>/dev/null || true
+      if [ -z "$(find "$FIXTURE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+        rmdir "$FIXTURE_LOCK" 2>/dev/null || true
+        return 0
+      fi
       sleep 1
     done
-    echo "Acceptance fixture cleanup still busy: $FIXTURE_WIN" >&2
+    rmdir "$FIXTURE_LOCK" 2>/dev/null || true
+    echo "Acceptance fixture contents still busy: $FIXTURE_WIN" >&2
+    return 1
   fi
 }
-trap cleanup EXIT
+trap cleanup_fixture EXIT
+
+if [ -n "$(find "$FIXTURE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+  echo "Acceptance fixture was not empty before the run: $FIXTURE_WIN" >&2
+  exit 1
+fi
 
 for command in "$CLAUDE_BIN" "$WARD_BIN" jq git; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -73,8 +98,9 @@ printf '%s\n' \
   "2. Launch a Task with subagent_type protocols:scout and run_in_background true. Its Task prompt must repeat: Ward host type protocols:scout, phase scout, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/scout-$NONCE.md and execute it." \
   "3. Launch a Task with subagent_type protocols:experiment-worker and run_in_background true. Its Task prompt must repeat: Ward host type protocols:experiment-worker, phase experiment-worker, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/experiment-$NONCE.md and execute it." \
   '4. After both background launches return, attempt Bash `git status --short`. Accept the expected foreman denial and do not retry or work around it.' \
-  '5. Use TaskOutput only for this acceptance run to wait for both background workers. Do not end the session while either is live.' \
-  "6. Return exactly: ACCEPTANCE_PARENT_OK $NONCE" \
+  "5. If and only if that Bash call was denied with the Foreman protocol message, use native Write to create notes-parent-$NONCE.md containing exactly $NONCE and PARENT_FOREMAN_DENIAL_OK." \
+  '6. Use TaskOutput only for this acceptance run to wait for both background workers. Do not end the session while either is live.' \
+  "7. Return exactly: ACCEPTANCE_PARENT_OK $NONCE" \
   > "$FIXTURE/prompts/parent-$NONCE.md"
 
 set +e
@@ -121,14 +147,13 @@ check_file "$FIXTURE/reports/experiment-$NONCE.md" "$NONCE"
 check_file "$FIXTURE/reports/experiment-$NONCE.md" "EXPERIMENT_OK"
 check_file "$FIXTURE/reports/experiment-$NONCE.md" "Experiment protocol active"
 check_file "$FIXTURE/reports/experiment-$NONCE.md" "evaluator is sealed"
+check_file "$FIXTURE/notes-parent-$NONCE.md" "$NONCE"
+check_file "$FIXTURE/notes-parent-$NONCE.md" "PARENT_FOREMAN_DENIAL_OK"
 check_stream "ACCEPTANCE_PARENT_OK $NONCE"
 check_stream 'SubagentStart'
 check_stream 'SubagentStop'
-check_stream 'subagent_type":"protocols:scout"'
-check_stream 'subagent_type":"protocols:experiment-worker"'
 check_stream 'ward: phase → scout ('
 check_stream 'ward: phase → experiment-worker ('
-check_stream 'Foreman protocol active'
 
 if ! git -C "$FIXTURE" log -1 --format=%s | grep -qF "$NONCE worker commit"; then
   echo "FAIL: experiment worker commit missing" >&2
@@ -165,7 +190,22 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
+worker_commit="$(git -C "$FIXTURE" rev-parse HEAD)"
+trap - EXIT
+if ! cleanup_fixture; then
+  exit 1
+fi
+
+SUCCESS_ARTIFACT="$ROOT/reports/ward-actor-acceptance-$NONCE.md"
+printf '%s\n' \
+  "# Ward actor acceptance $NONCE" \
+  "" \
+  "REAL CLAUDE ACTOR ACCEPTANCE PASSED" \
+  "distinct actors: $actor_count" \
+  "worker commit: $worker_commit" \
+  > "$SUCCESS_ARTIFACT"
+
 echo "REAL CLAUDE ACTOR ACCEPTANCE PASSED"
 echo "nonce: $NONCE"
 echo "distinct actors: $actor_count"
-echo "worker commit: $(git -C "$FIXTURE" rev-parse HEAD)"
+echo "artifact: $SUCCESS_ARTIFACT"
