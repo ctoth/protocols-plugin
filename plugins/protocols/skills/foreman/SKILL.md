@@ -134,6 +134,11 @@ regression checks, branch cleanliness, and source delta have been independently
 verified. If a worker report says it promoted itself, treat that as a protocol
 violation even if the measured result looks good.
 
+When the goal is open-ended ("make X faster") with several competing candidate
+hypotheses, coordinate them with the campaign protocol
+(`/protocols:campaign`) — a ledger-driven portfolio of experiment-protocol
+runs — rather than dispatching ad-hoc experiment workers.
+
 ### CLI agents (Codex/Gemini) are subagents — run them directly
 
 A CLI reviewer (Codex, Gemini) IS a subagent. The foreman dispatches it the
