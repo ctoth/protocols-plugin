@@ -38,8 +38,8 @@ class ActorScopedWardContractTest(unittest.TestCase):
         profile = (ROOT / "plugins/protocols/ward-profile/profile.yaml").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(manifest["version"], "0.3.0")
-        self.assertIn("version: 0.3.0", profile)
+        self.assertEqual(manifest["version"], "0.3.1")
+        self.assertIn("version: 0.3.1", profile)
         self.assertIn("actor-scoped-protocol-phases", profile)
 
     def test_subagent_start_hook_initializes_explicit_roles(self) -> None:
@@ -70,7 +70,24 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn('"$WARD_BIN" set', role_hook)
         self.assertIn("--hook-input", role_hook)
         self.assertIn('"$WARD_BIN" start-actor', role_hook)
+        self.assertIn("default) phase=codex-scout", role_hook)
         self.assertNotIn("--session", role_hook)
+
+    def test_native_codex_scout_is_mechanically_read_only(self) -> None:
+        rule = (
+            ROOT
+            / "plugins/protocols/ward-profile/rules/codex-scout-gate.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertIn('session.phase == "codex-scout"', rule)
+        self.assertIn('tool in ["Edit", "Write"]', rule)
+        self.assertIn('c.name == "rg"', rule)
+        self.assertIn('c.git_category == "query"', rule)
+        self.assertIn(
+            'c.git_subcommand in ["status", "diff", "log", "show", "rev-parse"]',
+            rule,
+        )
+        self.assertIn('size(input.commands) > 0', rule)
+        self.assertIn('input.command.matches', rule)
 
     def test_uninitialized_workers_fail_closed(self) -> None:
         rule = (
@@ -95,7 +112,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
             installer.REQUIRED_WARD_REVISION,
             "fb526ae936ce4715256d23c277ddec448359c598",
         )
-        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.0")
+        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.1")
         self.assertTrue(callable(installer.check_ward_compatibility))
         self.assertTrue(callable(installer.check_claude_plugin_compatibility))
         marketplace = installer.ClaudeMarketplace(
@@ -114,7 +131,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
         current = [
             {
                 "plugin": "protocols@protocols-marketplace",
-                "version": "0.3.0",
+                "version": "0.3.1",
                 "scope": "user",
                 "status": "enabled",
             }

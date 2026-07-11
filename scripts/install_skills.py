@@ -28,7 +28,7 @@ from pathlib import Path
 MARKER_FILENAME = ".protocols-plugin-install.json"
 DEFAULT_PLATFORMS = ("codex", "claude", "gemini")
 REQUIRED_WARD_REVISION = "fb526ae936ce4715256d23c277ddec448359c598"
-REQUIRED_PROTOCOLS_VERSION = "0.3.0"
+REQUIRED_PROTOCOLS_VERSION = "0.3.1"
 REQUIRED_WARD_HOOKS = {
     "PreToolUse": "eval",
     "SubagentStart": "start-actor",

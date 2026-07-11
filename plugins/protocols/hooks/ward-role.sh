@@ -1,5 +1,5 @@
 #!/bin/bash
-# SubagentStart hook: map an explicit Claude agent_type to its Ward actor phase.
+# SubagentStart hook: map exact host agent types to Ward actor phases.
 
 set -euo pipefail
 
@@ -29,6 +29,10 @@ case "$agent_type" in
     researcher|protocols:researcher) phase=researcher ;;
     adversary|protocols:adversary) phase=adversary ;;
     experiment-worker|protocols:experiment-worker) phase=experiment-worker ;;
+    # Native Codex collaboration exposes this exact, unselectable sentinel.
+    # It receives a distinct discovery-only phase; this does not infer a
+    # protocol role from the worker's prompt or agent ID.
+    default) phase=codex-scout ;;
     *)
         # Preserve Ward's fail-closed actor record even when the launch used an
         # unknown or generic Task type. The launcher must select a supported role.

@@ -14,7 +14,9 @@ ROLE_HOOK="$ROOT/plugins/protocols/hooks/ward-role.sh"
 SID="wp-actor-family-$$"
 SCOUT_ID="scout-$$"
 EXP_ID="experiment-$$"
+CODEX_ID="native-codex-scout"
 UNKNOWN_ID="unknown-$$"
+MISSING_ID="missing-$$"
 REPO="$(mktemp -d)"
 native_path() {
   if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"
@@ -76,8 +78,18 @@ unset WARD_RULES_PATH WARD_SESSION WARD_ACTOR_ID
 
 start_role "$SCOUT_ID" protocols:scout
 start_role "$EXP_ID" protocols:experiment-worker
+if ! start_role "$CODEX_ID" default; then
+  echo "native Codex default role failed to initialize"
+  fail=1
+fi
 if start_role "$UNKNOWN_ID" general-purpose 2>/dev/null; then
   echo "unknown role unexpectedly initialized"
+  fail=1
+fi
+if jq -cn --arg sid "$SID" --arg agent "$MISSING_ID" \
+    '{hook_event_name:"SubagentStart",session_id:$sid,agent_id:$agent}' |
+    CLAUDE_PLUGIN_ROOT="$ROOT/plugins/protocols" WARD_BIN="$WARD_BIN" bash "$ROLE_HOOK" >/dev/null 2>&1; then
+  echo "missing role unexpectedly initialized"
   fail=1
 fi
 
@@ -91,10 +103,27 @@ run_case "scout report Write allowed" Write "" "$SCOUT_ID" protocols:scout "$REP
 run_case "experiment commit allowed" Bash "git commit -m fixture" "$EXP_ID" protocols:experiment-worker "" ALLOW
 run_case "experiment promotion denied" Bash "git push" "$EXP_ID" protocols:experiment-worker "" DENY
 run_case "experiment evaluator Write denied" Write "" "$EXP_ID" protocols:experiment-worker "$REPO_WIN/tests/gold.txt" DENY
+run_case "native Codex rg files allowed" Bash "rg --files" "$CODEX_ID" default "" ALLOW
+run_case "native Codex rg search allowed" Bash "rg -n actor plugins" "$CODEX_ID" default "" ALLOW
+run_case "native Codex git status allowed" Bash "git status" "$CODEX_ID" default "" ALLOW
+run_case "native Codex git diff allowed" Bash "git diff --stat" "$CODEX_ID" default "" ALLOW
+run_case "native Codex git log allowed" Bash "git log -1 --oneline" "$CODEX_ID" default "" ALLOW
+run_case "native Codex git show allowed" Bash "git show --stat HEAD" "$CODEX_ID" default "" ALLOW
+run_case "native Codex git rev-parse allowed" Bash "git rev-parse HEAD" "$CODEX_ID" default "" ALLOW
+run_case "native Codex Edit denied" Edit "" "$CODEX_ID" default "$REPO_WIN/source.txt" DENY
+run_case "native Codex Write denied" Write "" "$CODEX_ID" default "$REPO_WIN/report.md" DENY
+run_case "native Codex Set-Content denied" Bash "Set-Content -Path report.md -Value changed" "$CODEX_ID" default "" DENY
+run_case "native Codex git commit denied" Bash "git commit -m forbidden" "$CODEX_ID" default "" DENY
+run_case "native Codex arbitrary executable denied" Bash "curl https://example.com" "$CODEX_ID" default "" DENY
+run_case "native Codex rg preprocessor denied" Bash "rg --pre 'touch report.md' actor" "$CODEX_ID" default "" DENY
+run_case "native Codex shell write denied" Bash "touch report.md" "$CODEX_ID" default "" DENY
+run_case "native Codex output redirection denied" Bash "rg --files > report.md" "$CODEX_ID" default "" DENY
+run_case "native Codex command substitution denied" Bash 'rg "$(touch report.md)"' "$CODEX_ID" default "" DENY
 run_case "uninitialized Bash denied" Bash "git status" "$UNKNOWN_ID" general-purpose "" DENY
 run_case "uninitialized Edit denied" Edit "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/source.txt" DENY
 run_case "uninitialized Write denied" Write "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/report.md" DENY
 run_case "uninitialized native Read allowed" Read "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/prompt.md" ALLOW
+run_case "missing type remains uninitialized" Bash "git status" "$MISSING_ID" "" "" DENY
 
 jq -cn --arg sid "$SID" --arg agent "$SCOUT_ID" \
   '{hook_event_name:"SubagentStop",session_id:$sid,agent_id:$agent}' | "$WARD_BIN" end-actor >/dev/null

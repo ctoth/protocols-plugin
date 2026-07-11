@@ -1,0 +1,25 @@
+when: >
+  session.phase == "codex-scout" && (
+    tool in ["Edit", "Write"] ||
+    (tool == "Bash" && (
+      !("commands" in input
+        && size(input.commands) > 0
+        && input.commands.all(c,
+          (c.name == "rg"
+            && !c.args.exists(a, a == "--pre" || a.startsWith("--pre="))) ||
+          (c.name == "git"
+            && c.git_category == "query"
+            && c.git_subcommand in ["status", "diff", "log", "show", "rev-parse"]
+            && !c.args.exists(a,
+              a == "-c" ||
+              a.startsWith("--config-env") ||
+              a == "--ext-diff" ||
+              a == "--textconv" ||
+              a == "--output" ||
+              a.startsWith("--output="))))) ||
+      !("command" in input) ||
+      input.command.matches(".*([<>`]|\\$\\().*")
+    ))
+  )
+action: deny
+message: "Native Codex collaboration discovery is read-only. Edit and Write are denied; Bash is limited to rg and the approved read-only Git queries, without shell redirection or command substitution."

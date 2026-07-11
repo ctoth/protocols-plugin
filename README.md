@@ -64,9 +64,11 @@ Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mech
 3. The main manager alone runs `ward set foreman` (`ward.exe set foreman` from
    Windows-hosted Git Bash), which changes actor `main`.
 4. This plugin's **SubagentStart** hook maps supported Claude `agent_type`
-   values to actor-local phases. Unknown/generic Task types remain
-   `uninitialized`, where Bash/Edit/Write fail closed while native Read remains
-   available for diagnosis.
+   values to actor-local protocol phases. It also maps native Codex
+   collaboration's exact, unselectable `default` sentinel to the distinct
+   `codex-scout` discovery phase. Missing and all other unknown/generic types
+   remain `uninitialized`, where Bash/Edit/Write fail closed while native Read
+   remains available for diagnosis.
 5. Ward gate rules evaluate each actor's independent phase, history, signals,
    and path ownership on every tool call.
 
@@ -79,11 +81,19 @@ only for hosts that emit them without plugin qualification. A physical prompt
 and its Task launch parameter must both name the same supported type. Task
 workers never run a session-global transition.
 
-Direct Codex/Gemini workers are separate: launch each with a unique
+Native Codex collaboration workers are not direct CLI workers: the host gives
+them a stable `agent_id` but only the unselectable `agent_type` value `default`.
+Ward does not infer a protocol role from their prompt or ID. The hook assigns
+only the distinct `codex-scout` phase, which denies Edit and Write and limits
+Bash to parsed `rg` commands and the approved read-only Git queries (`status`,
+`diff`, `log`, `show`, and `rev-parse`), without redirection or command
+substitution. Missing and other unknown types do not receive this phase.
+
+Direct Codex/Gemini CLI workers are separate again: launch each with a unique
 `WARD_SESSION` and `WARD_ACTOR_ID`, then have that CLI worker run `ward set
-<phase>`. Hosts that cannot provide either a real Task `agent_id` or an
-explicit `WARD_ACTOR_ID` cannot safely run concurrent mechanically enforced
-roles.
+<phase>` to select an explicit protocol phase. Hosts that cannot provide either
+a real collaboration `agent_id` or an explicit `WARD_ACTOR_ID` cannot safely
+run concurrent mechanically enforced roles.
 
 ### Gate Rules
 
@@ -93,6 +103,7 @@ roles.
 | `adversary-gate.yaml` | `adversary` | Edit, Write, Bash |
 | `researcher-gate.yaml` | `researcher` | Edit (Write allowed for reports) |
 | `experiment-gate.yaml` | `experiment-worker` | Integration-branch moves — `git push`, `merge`, `rebase`, `cherry-pick`, `pull`, `switch`/`checkout` (commit, add, branch, tag stay allowed; override: `ward allow experiment-promote`) |
+| `codex-scout-gate.yaml` | `codex-scout` | Edit, Write, and Bash outside the finite parsed read-only discovery grammar |
 | `uninitialized-worker-gate.yaml` | `uninitialized` | Bash, Edit, Write until a supported Task role is initialized |
 
 ## Installation
@@ -139,8 +150,8 @@ supported targets.
 
 ## Required compatibility set
 
-- Protocols Claude plugin `0.3.0`
-- `protocols-gates` Ward profile `0.3.0`
+- Protocols Claude plugin `0.3.1`
+- `protocols-gates` Ward profile `0.3.1`
 - Ward revision `fb526ae936ce4715256d23c277ddec448359c598`, built from a clean committed tree
 - Ward lifecycle hooks: `PreToolUse eval`, `SubagentStart start-actor`,
   `SubagentStop end-actor`, and `SessionEnd end-session`, each installed by

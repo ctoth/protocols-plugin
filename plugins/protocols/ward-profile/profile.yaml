@@ -1,5 +1,5 @@
 name: protocols-gates
-version: 0.3.0
+version: 0.3.1
 description: >
   Phase-gate rules for the protocols plugin. Mechanically enforces the tool
   restrictions of the foreman, adversary, researcher, and experiment protocols
@@ -13,6 +13,7 @@ exports:
     - protocol-phase-gates
     - actor-scoped-protocol-phases
     - fail-closed-worker-initialization
+    - native-codex-read-only-discovery
 blocks:
   operations:
     - foreman-execute
@@ -21,3 +22,4 @@ blocks:
     - experiment-integration-move
     - experiment-evaluator-edit
     - uninitialized-worker-execute
+    - native-codex-discovery-mutate

@@ -39,6 +39,20 @@ to the unprefixed Ward phases `scout`, `coder`, `analyst`, `verifier`,
 generic types remain `uninitialized`; Ward allows native Read for diagnosis but
 denies Bash/Edit/Write. Never use `general-purpose` as a fallback.
 
+Native Codex collaboration is a separate host surface from Claude Task. It
+provides a stable actor ID but only the exact, unselectable `agent_type` value
+`default`. The SubagentStart hook maps that sentinel to the distinct
+`codex-scout` phase: native Read remains available, Edit and Write are denied,
+and Bash is limited to the profile's finite parsed read-only discovery grammar.
+This is not protocol-role inference; missing and every other unknown type stay
+`uninitialized` and fail closed.
+
+Direct Codex/Gemini CLI workers are separate from both Claude Task and native
+Codex collaboration. Launch each with unique `WARD_SESSION` and
+`WARD_ACTOR_ID` values, then let that worker select its explicit phase with
+`ward set <phase>` (`ward.exe` from Windows-hosted Git Bash). The `default` to
+`codex-scout` mapping does not apply to direct CLI workers.
+
 NEVER use READ-ONLY agent types (Explore, Plan, or similar) as workers, even in planning mode — they cannot write report files to `./reports/` and will fail. Since subagents must write reports, the type you pick MUST be write-capable.
 
 ## The Problem
