@@ -233,13 +233,16 @@ class ActorScopedWardContractTest(unittest.TestCase):
                     }
                 ]
 
-            self.assertEqual(
-                installer.check_codex_plugin_compatibility(current, listing()), []
-            )
-            integrity = installer.check_codex_plugin_integrity(
-                current,
-                ROOT / "plugins/protocols/hooks/hooks.json",
-            )
+            with mock.patch.object(
+                installer, "active_codex_plugin_root", return_value=plugin_root
+            ):
+                self.assertEqual(
+                    installer.check_codex_plugin_compatibility(current, listing()), []
+                )
+                integrity = installer.check_codex_plugin_integrity(
+                    current,
+                    ROOT / "plugins/protocols/hooks/hooks.json",
+                )
             self.assertIn("differs from source", " ".join(integrity))
 
             variants = (
@@ -258,14 +261,17 @@ class ActorScopedWardContractTest(unittest.TestCase):
             )
             for hooks_result, message in variants:
                 with self.subTest(message=message):
-                    self.assertIn(
-                        message,
-                        " ".join(
-                            installer.check_codex_plugin_compatibility(
-                                current, hooks_result
-                            )
-                        ),
-                    )
+                    with mock.patch.object(
+                        installer, "active_codex_plugin_root", return_value=plugin_root
+                    ):
+                        self.assertIn(
+                            message,
+                            " ".join(
+                                installer.check_codex_plugin_compatibility(
+                                    current, hooks_result
+                                )
+                            ),
+                        )
 
     def test_codex_install_trusts_only_active_protocols_hooks_after_consent(self) -> None:
         installer = load_installer()
@@ -297,9 +303,9 @@ class ActorScopedWardContractTest(unittest.TestCase):
                 "sourcePath": str(plugin_root / "hooks/hooks.json"),
                 "source": "plugin",
                 "pluginId": installer.CODEX_PROTOCOLS_PLUGIN_ID,
-                "enabled": True,
+                "enabled": False,
                 "currentHash": current_hash,
-                "trustStatus": "untrusted",
+                "trustStatus": "modified",
             }
             for key, event, script, current_hash in (
                 (
@@ -329,7 +335,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
             {
                 **listing[0],
                 "hooks": [
-                    {**hook, "trustStatus": "trusted"}
+                    {**hook, "enabled": True, "trustStatus": "trusted"}
                     for hook in listing[0]["hooks"]
                 ],
             }
@@ -346,6 +352,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "--trust-codex-hooks"):
                 installer.install_codex_plugin(False, trust_hooks=False)
+            write_trust.assert_not_called()
             self.assertEqual(
                 installer.install_codex_plugin(False, trust_hooks=True),
                 "authorized",
@@ -445,8 +452,16 @@ class ActorScopedWardContractTest(unittest.TestCase):
                 return_value=[
                     {
                         "hooks": [
-                            {"key": installer.CODEX_SESSION_HOOK_KEY, "trustStatus": "trusted"},
-                            {"key": installer.CODEX_SUBAGENT_HOOK_KEY, "trustStatus": "trusted"},
+                            {
+                                "key": installer.CODEX_SESSION_HOOK_KEY,
+                                "enabled": True,
+                                "trustStatus": "trusted",
+                            },
+                            {
+                                "key": installer.CODEX_SUBAGENT_HOOK_KEY,
+                                "enabled": True,
+                                "trustStatus": "trusted",
+                            },
                         ],
                         "warnings": [],
                         "errors": [],

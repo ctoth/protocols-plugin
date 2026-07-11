@@ -523,7 +523,6 @@ def codex_hook_hashes_for_authorization(
             or hook.get("handlerType") != "command"
             or hook.get("source") != "plugin"
             or hook.get("pluginId") != CODEX_PROTOCOLS_PLUGIN_ID
-            or hook.get("enabled") is not True
             or not isinstance(command, str)
             or "sh.exe -lc" not in command
             or "cygpath -u" not in command
@@ -585,7 +584,9 @@ def install_codex_plugin(force: bool, *, trust_hooks: bool) -> str:
     hashes = codex_hook_hashes_for_authorization(current_entries, hook_results)
     trusted = all(
         any(
-            hook.get("key") == key and hook.get("trustStatus") == "trusted"
+            hook.get("key") == key
+            and hook.get("enabled") is True
+            and hook.get("trustStatus") == "trusted"
             for result in hook_results
             for hook in (result.get("hooks") if isinstance(result.get("hooks"), list) else [])
             if isinstance(hook, dict)
@@ -606,7 +607,9 @@ def install_codex_plugin(force: bool, *, trust_hooks: bool) -> str:
     failures = check_codex_plugin_compatibility(current_entries, verified)
     for key in verified_hashes:
         if not any(
-            hook.get("key") == key and hook.get("trustStatus") == "trusted"
+            hook.get("key") == key
+            and hook.get("enabled") is True
+            and hook.get("trustStatus") == "trusted"
             for result in verified
             for hook in (result.get("hooks") if isinstance(result.get("hooks"), list) else [])
             if isinstance(hook, dict)
