@@ -29,6 +29,7 @@ MARKER_FILENAME = ".protocols-plugin-install.json"
 DEFAULT_PLATFORMS = ("codex", "claude", "gemini")
 REQUIRED_WARD_REVISION = "fb526ae936ce4715256d23c277ddec448359c598"
 REQUIRED_PROTOCOLS_VERSION = "0.3.1"
+CODEX_PROTOCOLS_PLUGIN_ID = "protocols@protocols-marketplace"
 REQUIRED_WARD_HOOKS = {
     "PreToolUse": "eval",
     "SubagentStart": "start-actor",
@@ -169,6 +170,15 @@ def claude_cli_cmd(*args: str) -> list[str]:
     return [source, *args]
 
 
+def codex_cli_cmd(*args: str) -> list[str]:
+    candidates = ("codex.exe", "codex.cmd") if os.name == "nt" else ("codex",)
+    for candidate in candidates:
+        path = shutil.which(candidate)
+        if path:
+            return [path, *args]
+    raise RuntimeError("Codex CLI not found on PATH")
+
+
 def format_cli_output(result: subprocess.CompletedProcess[str]) -> str:
     parts = [result.stdout.strip(), result.stderr.strip()]
     return "\n".join(part for part in parts if part).strip()
@@ -217,6 +227,137 @@ def list_claude_plugins() -> list[dict[str, str]]:
     result = run_cli(claude_cli_cmd("plugin", "list"))
     ensure_success(result, "claude plugin list")
     return parse_claude_plugin_list(result.stdout)
+
+
+def parse_codex_plugin_list(output: str) -> list[dict[str, object]]:
+    try:
+        data = json.loads(output)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"codex plugin list returned invalid JSON: {error}") from error
+
+    installed = data.get("installed") if isinstance(data, dict) else None
+    if not isinstance(installed, list):
+        raise RuntimeError("codex plugin list JSON is missing the installed array")
+    if not all(isinstance(entry, dict) for entry in installed):
+        raise RuntimeError("codex plugin list JSON contains an invalid installed entry")
+    return installed
+
+
+def list_codex_plugins() -> list[dict[str, object]]:
+    result = run_cli(codex_cli_cmd("plugin", "list", "--json"))
+    ensure_success(result, "codex plugin list --json")
+    return parse_codex_plugin_list(result.stdout)
+
+
+def check_codex_plugin_compatibility(entries: list[dict[str, object]]) -> list[str]:
+    entry = next(
+        (
+            candidate
+            for candidate in entries
+            if candidate.get("pluginId") == CODEX_PROTOCOLS_PLUGIN_ID
+            and candidate.get("installed") is True
+        ),
+        None,
+    )
+    if entry is None:
+        return [f"Codex plugin {CODEX_PROTOCOLS_PLUGIN_ID} is not installed"]
+
+    failures: list[str] = []
+    if entry.get("enabled") is not True:
+        failures.append(f"Codex plugin {CODEX_PROTOCOLS_PLUGIN_ID} is not enabled")
+    if entry.get("version") != REQUIRED_PROTOCOLS_VERSION:
+        failures.append(
+            f"Codex plugin {CODEX_PROTOCOLS_PLUGIN_ID} is "
+            f"{entry.get('version', 'unknown')}; required {REQUIRED_PROTOCOLS_VERSION}"
+        )
+
+    source = entry.get("source")
+    source_path = source.get("path") if isinstance(source, dict) else None
+    name = entry.get("name")
+    marketplace_name = entry.get("marketplaceName")
+    version = entry.get("version")
+    cache_root = (
+        Path.home()
+        / ".codex"
+        / "plugins"
+        / "cache"
+        / marketplace_name
+        / name
+        / version
+        if all(isinstance(value, str) for value in (marketplace_name, name, version))
+        else None
+    )
+    plugin_root = (
+        cache_root
+        if cache_root is not None and cache_root.is_dir()
+        else Path(source_path) if isinstance(source_path, str) else None
+    )
+    manifest_path = plugin_root / "hooks" / "hooks.json" if plugin_root else None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path else {}
+    except (OSError, json.JSONDecodeError) as error:
+        failures.append(
+            f"Codex plugin hook manifest is unreadable at {manifest_path}: {error}"
+        )
+        return failures
+
+    hooks = manifest.get("hooks") if isinstance(manifest, dict) else None
+    groups = hooks.get("SubagentStart") if isinstance(hooks, dict) else None
+    role_hook_found = False
+    if isinstance(groups, list):
+        for group in groups:
+            nested = group.get("hooks") if isinstance(group, dict) else None
+            if not isinstance(nested, list):
+                continue
+            if any(
+                isinstance(hook, dict)
+                and isinstance(hook.get("command"), str)
+                and hook["command"].replace("\\", "/").endswith("/ward-role.sh")
+                for hook in nested
+            ):
+                role_hook_found = True
+                break
+    if not role_hook_found:
+        failures.append(
+            "Codex plugin hook manifest is missing SubagentStart -> ward-role.sh"
+        )
+    return failures
+
+
+def install_codex_plugin(force: bool) -> str:
+    entries = list_codex_plugins()
+    installed = any(
+        entry.get("pluginId") == CODEX_PROTOCOLS_PLUGIN_ID
+        and entry.get("installed") is True
+        for entry in entries
+    )
+    stale = bool(check_codex_plugin_compatibility(entries))
+    if installed and (stale or force):
+        remove_result = run_cli(
+            codex_cli_cmd("plugin", "remove", CODEX_PROTOCOLS_PLUGIN_ID)
+        )
+        ensure_success(remove_result, f"codex plugin remove {CODEX_PROTOCOLS_PLUGIN_ID}")
+    if not installed or stale or force:
+        add_result = run_cli(
+            codex_cli_cmd("plugin", "add", CODEX_PROTOCOLS_PLUGIN_ID, "--json")
+        )
+        ensure_success(add_result, f"codex plugin add {CODEX_PROTOCOLS_PLUGIN_ID}")
+        return "refreshed" if installed else "installed"
+    return "unchanged"
+
+
+def uninstall_codex_plugin() -> str:
+    entries = list_codex_plugins()
+    installed = any(
+        entry.get("pluginId") == CODEX_PROTOCOLS_PLUGIN_ID
+        and entry.get("installed") is True
+        for entry in entries
+    )
+    if not installed:
+        return "missing"
+    result = run_cli(codex_cli_cmd("plugin", "remove", CODEX_PROTOCOLS_PLUGIN_ID))
+    ensure_success(result, f"codex plugin remove {CODEX_PROTOCOLS_PLUGIN_ID}")
+    return "removed"
 
 
 def installed_ward_hook_commands() -> dict[str, list[str]]:
@@ -569,7 +710,7 @@ def run_doctor(skills: list[Skill]) -> int:
         elif meta["required"]:
             failures += 1
 
-    print("\nWard compatibility:")
+    print("\nWard and Claude lifecycle compatibility:")
     ward_path = found_tools.get("ward")
     if ward_path:
         ward_failures, ward_details = check_ward_compatibility(ward_path)
@@ -580,7 +721,9 @@ def run_doctor(skills: list[Skill]) -> int:
                 print(f"  - FAIL: {failure}")
             failures += len(ward_failures)
         else:
-            print("  - OK: actor scope, lifecycle hooks, build revision, and profile")
+            print(
+                "  - OK: actor scope, Claude lifecycle hooks, build revision, and profile"
+            )
     else:
         print("  - FAIL: Ward executable unavailable")
 
@@ -604,6 +747,30 @@ def run_doctor(skills: list[Skill]) -> int:
     else:
         failures += 1
 
+    try:
+        codex_path = codex_cli_cmd()[0]
+    except RuntimeError:
+        codex_path = None
+    status = "OK" if codex_path else "MISSING"
+    print("  - codex: " + status + " | native plugin install path | affects: codex")
+    if codex_path:
+        print(f"      {codex_path}")
+        try:
+            codex_failures = check_codex_plugin_compatibility(list_codex_plugins())
+        except RuntimeError as error:
+            codex_failures = [str(error)]
+        if codex_failures:
+            for failure in codex_failures:
+                print(f"  - FAIL: {failure}")
+            failures += len(codex_failures)
+        else:
+            print(
+                "  - OK: Codex plugin version "
+                f"{REQUIRED_PROTOCOLS_VERSION} with SubagentStart role hook"
+            )
+    else:
+        failures += 1
+
     manifest_path = root / "plugins" / "protocols" / ".claude-plugin" / "plugin.json"
     profile_path = root / "plugins" / "protocols" / "ward-profile" / "profile.yaml"
     manifest_version = json.loads(manifest_path.read_text(encoding="utf-8")).get("version")
@@ -622,6 +789,9 @@ def run_doctor(skills: list[Skill]) -> int:
     for platform_name in DEFAULT_PLATFORMS:
         if platform_name == "claude":
             print("  - claude: native plugin install via `claude plugin marketplace add/install`")
+        elif platform_name == "codex":
+            roots = ", ".join(str(root) for root in target_roots(platform_name))
+            print("  - codex: native plugin install via `codex plugin add` plus " + roots)
         else:
             roots = ", ".join(str(root) for root in target_roots(platform_name))
             print(f"  - {platform_name}: {roots}")
@@ -673,6 +843,14 @@ def main() -> int:
                 print(f"  - {name}: {result}")
             continue
 
+        if platform_name == "codex":
+            print(f"{args.command.title()} codex plugin via native Codex CLI")
+            if args.command == "install":
+                codex_result = install_codex_plugin(args.force)
+            else:
+                codex_result = uninstall_codex_plugin()
+            print(f"  - {CODEX_PROTOCOLS_PLUGIN_ID}: {codex_result}")
+
         for dest_root in target_roots(platform_name):
             print(f"{args.command.title()} {platform_name} skills -> {dest_root}")
             for skill in skills:
@@ -683,7 +861,10 @@ def main() -> int:
                 print(f"  - {skill.name}: {result}")
 
     if args.command == "install":
-        print("\nRestart Codex/Claude/Gemini if they are already running.")
+        print(
+            "\nRestart Codex/Claude/Gemini if they are already running; "
+            "Codex must restart after a native plugin refresh."
+        )
 
     return 0
 

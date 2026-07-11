@@ -8,9 +8,10 @@ Provides 14 behavioral protocol skills that define operational modes for Claude 
 
 Protocols that restrict tools (foreman, adversary, researcher, experiment) include ward gate rules that mechanically enforce those restrictions at the PreToolUse hook level, preventing accidental violations.
 
-Codex and Gemini do not use Claude's plugin marketplace, so this repository also
-ships a script-based installer that links the protocol skill directories into
-their user skill roots.
+Codex uses its own native plugin installation and cache, while Gemini consumes
+skill directories directly. This repository ships one installer that manages
+the Claude and Codex native plugins and links skills into the Codex and Gemini
+user skill roots.
 
 ## Protocols
 
@@ -49,9 +50,11 @@ guard state independent from the main manager and sibling workers.
 These agents are Claude-only. Codex and Gemini do not load Claude plugin agents — they
 consume the equivalent doctrine from the `gauntlet` and `subagent` skills' prose.
 
-The script-based installer (`scripts/install_skills.py`) installs **skills only**. Agents
-load through Claude's native plugin system: the `agents/` directory is auto-discovered when
-the plugin is installed via `claude plugin install`, so no manifest declaration is required.
+The script-based installer (`scripts/install_skills.py`) installs the native
+Claude and Codex plugins as well as platform skill links. Claude agents load
+through Claude's native plugin system: the `agents/` directory is
+auto-discovered when the plugin is installed via `claude plugin install`, so no
+manifest declaration is required.
 
 ## Ward Integration
 
@@ -117,8 +120,8 @@ claude plugin install protocols@protocols-marketplace
 
 ### Script-based installer for Codex and Gemini
 
-Use the bundled installer when you want the protocol skills installed into
-Codex and/or Gemini user skill directories:
+Use the bundled installer to install the native Codex plugin and Codex skill
+links, and/or to install Gemini skill links:
 
 ```bash
 uv run scripts/install_skills.py doctor
@@ -128,6 +131,9 @@ uv run scripts/install_skills.py install --platform codex --platform gemini
 What the installer does:
 
 - discovers every `plugins/*/skills/*/SKILL.md` directory;
+- installs `protocols@protocols-marketplace` through `codex plugin add`;
+- refreshes a stale Codex native plugin with an intentional `codex plugin
+  remove` followed by `codex plugin add`;
 - installs Codex skills into both `~/.agents/skills` and
   `~/.codex/skills/protocols-plugin`;
 - installs Gemini skills into `~/.gemini/skills`;
@@ -145,12 +151,15 @@ uv run scripts/install_skills.py uninstall
 ```
 
 `install --platform claude` uses Claude's native `claude plugin
-marketplace add/install` flow under the hood. Omitting `--platform` installs all
-supported targets.
+marketplace add/install` flow under the hood. `install --platform codex` keeps
+the existing skill-link behavior and also installs or refreshes the native
+Codex plugin. Omitting `--platform` installs all supported targets. Restart
+Codex after any native plugin install or refresh so the new lifecycle hook
+chain is loaded.
 
 ## Required compatibility set
 
-- Protocols Claude plugin `0.3.1`
+- Protocols Claude and Codex native plugins `0.3.1`
 - `protocols-gates` Ward profile `0.3.1`
 - Ward revision `fb526ae936ce4715256d23c277ddec448359c598`, built from a clean committed tree
 - Ward lifecycle hooks: `PreToolUse eval`, `SubagentStart start-actor`,
@@ -159,9 +168,11 @@ supported targets.
 - `jq` for safe SubagentStart role parsing
 - `uv` is required for the script-based installer
 
-`uv run scripts/install_skills.py doctor` fails if any Ward capability,
-revision, lifecycle hook, profile version, or installed Claude plugin version
-is missing or stale. A coherent install is proved with:
+`uv run scripts/install_skills.py doctor` checks Claude and Codex independently.
+It fails if any Ward capability, revision, Claude lifecycle hook, profile
+version, installed Claude plugin version, installed Codex plugin version, or
+Codex cached/source `SubagentStart -> ward-role.sh` hook is missing or stale. A
+coherent install is proved with:
 
 ```bash
 ward validate-profile ./plugins/protocols/ward-profile
@@ -170,8 +181,13 @@ ward list-profiles
 ward validate
 claude plugin update protocols@protocols-marketplace
 claude plugin list
+uv run scripts/install_skills.py install --platform codex
+codex plugin list --json
 uv run scripts/install_skills.py doctor
 ```
+
+After a Codex refresh, restart Codex before running the separate live native
+spawn acceptance. An already-running process retains its previous hook chain.
 
 ## Verification
 

@@ -5,3 +5,9 @@
 - Target: native Codex `default` actor read-only discovery
 - Result: 0 failures in 34 focused actor-profile cases; full gate passed
 - Commits: included in this atomic iteration fix
+
+## 002 - 2026-07-11
+- Start: 0 failures in 7 focused installer contract tests; live Codex plugin 0.2.0 lacked the role hook
+- Target: native Codex plugin refresh and independent doctor compatibility checks
+- Result: 0 failures in 9 focused installer contract tests; Codex and Claude at 0.3.1; full gate passed
+- Commits: included in this atomic iteration fix

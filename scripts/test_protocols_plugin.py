@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,6 +142,121 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("0.1.2", installer.check_claude_plugin_compatibility(stale, marketplace)[0])
         self.assertEqual(
             installer.check_claude_plugin_compatibility(current, marketplace), []
+        )
+
+    def test_codex_plugin_json_requires_current_enabled_role_hook(self) -> None:
+        installer = load_installer()
+        plugin_id = "protocols@protocols-marketplace"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_root = Path(temp_dir)
+            hooks_dir = plugin_root / "hooks"
+            hooks_dir.mkdir()
+            manifest_path = hooks_dir / "hooks.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "hooks": {
+                            "SubagentStart": [
+                                {
+                                    "hooks": [
+                                        {
+                                            "command": (
+                                                "${CLAUDE_PLUGIN_ROOT}/hooks/ward-role.sh"
+                                            )
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            current_json = json.dumps(
+                {
+                    "installed": [
+                        {
+                            "pluginId": plugin_id,
+                            "version": "0.3.1",
+                            "installed": True,
+                            "enabled": True,
+                            "source": {"path": str(plugin_root)},
+                        }
+                    ]
+                }
+            )
+            current = installer.parse_codex_plugin_list(current_json)
+            self.assertEqual(installer.check_codex_plugin_compatibility(current), [])
+
+            variants = (
+                ([], "is not installed"),
+                ([{**current[0], "enabled": False}], "not enabled"),
+                ([{**current[0], "version": "0.2.0"}], "0.2.0"),
+            )
+            for entries, message in variants:
+                with self.subTest(message=message):
+                    self.assertIn(
+                        message,
+                        installer.check_codex_plugin_compatibility(entries)[0],
+                    )
+
+            manifest_path.write_text(
+                json.dumps({"hooks": {"SessionStart": []}}), encoding="utf-8"
+            )
+            self.assertIn(
+                "SubagentStart",
+                installer.check_codex_plugin_compatibility(current)[0],
+            )
+            self.assertIn(
+                "ward-role.sh",
+                installer.check_codex_plugin_compatibility(current)[0],
+            )
+
+    def test_codex_install_refreshes_stale_native_plugin(self) -> None:
+        installer = load_installer()
+        plugin_id = "protocols@protocols-marketplace"
+        stale_json = json.dumps(
+            {
+                "installed": [
+                    {
+                        "pluginId": plugin_id,
+                        "version": "0.2.0",
+                        "installed": True,
+                        "enabled": True,
+                        "source": {"path": "missing-stale-cache"},
+                    }
+                ]
+            }
+        )
+        commands: list[list[str]] = []
+
+        def fake_run_cli(command: list[str]) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            stdout = stale_json if command[-3:] == ["plugin", "list", "--json"] else "{}"
+            return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+        args = installer.argparse.Namespace(
+            command="install", platforms=["codex"], force=False
+        )
+        with (
+            mock.patch.object(installer, "parse_args", return_value=args),
+            mock.patch.object(installer, "run_cli", side_effect=fake_run_cli),
+            mock.patch.object(installer, "target_roots", return_value=()),
+            mock.patch.object(
+                installer.shutil,
+                "which",
+                side_effect=lambda name: "C:/bin/codex.cmd" if name == "codex.cmd" else None,
+            ),
+        ):
+            self.assertEqual(installer.main(), 0)
+
+        self.assertEqual(
+            commands,
+            [
+                ["C:/bin/codex.cmd", "plugin", "list", "--json"],
+                ["C:/bin/codex.cmd", "plugin", "remove", plugin_id],
+                ["C:/bin/codex.cmd", "plugin", "add", plugin_id, "--json"],
+            ],
         )
 
     def test_actor_smokes_and_real_acceptance_harness_are_present(self) -> None:
