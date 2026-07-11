@@ -1,0 +1,36 @@
+{
+  "root_thread_id": "019f51ac-6a92-7120-88fc-6728f3aacd6e",
+  "child_thread_id": "019f51ac-f724-7730-bf13-6797eb5b4f83",
+  "child_start": {
+    "method": "item/completed",
+    "type": "subAgentActivity",
+    "kind": "started",
+    "agent_thread_id": "019f51ac-f724-7730-bf13-6797eb5b4f83"
+  },
+  "protocols_start_hook": {
+    "method": "hook/completed",
+    "thread_id": "019f51ac-f724-7730-bf13-6797eb5b4f83",
+    "event_name": "subagentStart",
+    "status": "completed",
+    "source": "plugin",
+    "source_path": "C:/Users/Q/.codex/plugins/cache/protocols-marketplace/protocols/0.3.3/hooks/hooks.json"
+  },
+  "allowed_command": {
+    "method": "item/completed",
+    "thread_id": "019f51ac-f724-7730-bf13-6797eb5b4f83",
+    "type": "commandExecution",
+    "command": "rg --files C:/Users/Q/AppData/Local/Temp/protocols-codex-native-app-server-i71xdh91",
+    "status": "completed",
+    "exit_code": 0
+  },
+  "ward_actor": {
+    "session_key": "019f51ac-6a92-7120-88fc-6728f3aacd6e",
+    "actor_key": "019f51ac-f724-7730-bf13-6797eb5b4f83",
+    "agent_type": "default",
+    "phase": "codex-scout"
+  },
+  "ward_denial": {
+    "command": "Set-Content -Path C:/Users/Q/AppData/Local/Temp/protocols-codex-native-app-server-i71xdh91/forbidden.txt -Value forbidden",
+    "message": "Command blocked by PreToolUse hook: Native Codex collaboration discovery is read-only."
+  }
+}

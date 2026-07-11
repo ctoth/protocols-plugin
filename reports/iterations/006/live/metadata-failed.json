@@ -1,0 +1,14 @@
+{
+  "codex_version": "codex-cli 0.144.1",
+  "protocols_version": "0.3.3",
+  "root_thread_id": "019f51ac-6a92-7120-88fc-6728f3aacd6e",
+  "child_thread_id": "019f51ac-f724-7730-bf13-6797eb5b4f83",
+  "typed_child_start": true,
+  "protocols_subagent_start_completed": true,
+  "allowed_rg_observed": true,
+  "ward_denial_observed": true,
+  "phase": "codex-scout",
+  "actor_cleanup": false,
+  "session_cleanup": false,
+  "result": "timeout"
+}

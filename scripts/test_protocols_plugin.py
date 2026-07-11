@@ -41,8 +41,8 @@ class ActorScopedWardContractTest(unittest.TestCase):
         profile = (ROOT / "plugins/protocols/ward-profile/profile.yaml").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(manifest["version"], "0.3.2")
-        self.assertIn("version: 0.3.2", profile)
+        self.assertEqual(manifest["version"], "0.3.3")
+        self.assertIn("version: 0.3.3", profile)
         self.assertIn("actor-scoped-protocol-phases", profile)
 
     def test_subagent_start_hook_initializes_explicit_roles(self) -> None:
@@ -90,6 +90,8 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("--hook-input", role_hook)
         self.assertIn('"$WARD_BIN" start-actor', role_hook)
         self.assertIn("default) phase=codex-scout", role_hook)
+        self.assertIn("codex_turn_id", role_hook)
+        self.assertIn('[ -z "$agent_type" ] && [ -n "$codex_turn_id" ]', role_hook)
         self.assertNotIn("--session", role_hook)
 
     def test_native_codex_scout_is_mechanically_read_only(self) -> None:
@@ -131,7 +133,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
             installer.REQUIRED_WARD_REVISION,
             "cea6f35bdc4dea1180f2bb879dcb3a66f430795d",
         )
-        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.2")
+        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.3")
         self.assertTrue(callable(installer.check_ward_compatibility))
         self.assertTrue(callable(installer.check_claude_plugin_compatibility))
         marketplace = installer.ClaudeMarketplace(
@@ -150,7 +152,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
         current = [
             {
                 "plugin": "protocols@protocols-marketplace",
-                "version": "0.3.2",
+                "version": "0.3.3",
                 "scope": "user",
                 "status": "enabled",
             }
@@ -195,7 +197,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
                             "pluginId": plugin_id,
                             "name": "protocols",
                             "marketplaceName": "protocols-marketplace",
-                            "version": "0.3.2",
+                            "version": "0.3.3",
                             "installed": True,
                             "enabled": True,
                             "source": {"path": str(plugin_root)},
@@ -275,13 +277,13 @@ class ActorScopedWardContractTest(unittest.TestCase):
 
     def test_codex_install_trusts_only_active_protocols_hooks_after_consent(self) -> None:
         installer = load_installer()
-        plugin_root = Path.home() / ".codex/plugins/cache/protocols-marketplace/protocols/0.3.2"
+        plugin_root = Path.home() / ".codex/plugins/cache/protocols-marketplace/protocols/0.3.3"
         entries = [
             {
                 "pluginId": installer.CODEX_PROTOCOLS_PLUGIN_ID,
                 "name": "protocols",
                 "marketplaceName": "protocols-marketplace",
-                "version": "0.3.2",
+                "version": "0.3.3",
                 "installed": True,
                 "enabled": True,
                 "source": {"path": str(plugin_root)},
@@ -416,7 +418,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
                         "pluginId": plugin_id,
                         "name": "protocols",
                         "marketplaceName": "protocols-marketplace",
-                        "version": "0.3.2",
+                        "version": "0.3.3",
                         "installed": True,
                         "enabled": True,
                         "source": {"path": "current-cache"},
@@ -538,6 +540,9 @@ class ActorScopedWardContractTest(unittest.TestCase):
         codex_acceptance = (
             ROOT / "scripts/codex_native_worker_acceptance.sh"
         ).read_text(encoding="utf-8")
+        codex_app_server_acceptance = (
+            ROOT / "scripts/codex_native_app_server_acceptance.py"
+        ).read_text(encoding="utf-8")
         self.assertIn("agent_id", profile_smoke)
         self.assertIn("uninitialized", profile_smoke)
         self.assertIn("experiment-worker", experiment_smoke)
@@ -555,16 +560,17 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("ward-actor-acceptance-$NONCE.md", acceptance)
         self.assertIn("ward-actor-acceptance", acceptance)
         self.assertIn("FIXTURE_LOCK", acceptance)
-        self.assertIn("codex exec", codex_acceptance)
-        self.assertIn("codex-cli 0.144.1", codex_acceptance)
+        self.assertIn("app-server", codex_acceptance)
+        self.assertIn("codex-cli 0.144.1", codex_app_server_acceptance)
         self.assertIn("fresh", codex_acceptance.lower())
-        self.assertIn("agent_type=default", codex_acceptance)
-        self.assertIn("phase=codex-scout", codex_acceptance)
-        self.assertIn("matching actor id", codex_acceptance.lower())
-        self.assertIn("plugin hook run", codex_acceptance.lower())
-        self.assertIn("enforcement denial", codex_acceptance.lower())
-        self.assertIn("actor cleanup", codex_acceptance.lower())
-        self.assertNotIn("ward set", codex_acceptance.lower())
+        self.assertIn("phase=codex-scout", codex_app_server_acceptance)
+        self.assertIn("worker thread id", codex_app_server_acceptance.lower())
+        self.assertIn("allowed rg execution", codex_app_server_acceptance.lower())
+        self.assertIn("explicit ward write denial", codex_app_server_acceptance.lower())
+        self.assertIn("exact actor cleanup", codex_app_server_acceptance.lower())
+        self.assertIn("exact session cleanup", codex_app_server_acceptance.lower())
+        self.assertNotIn("grep", codex_app_server_acceptance.lower())
+        self.assertIn("do not run ward set", codex_app_server_acceptance.lower())
 
 
 if __name__ == "__main__":

@@ -30,3 +30,10 @@
 - Result: 1 native acceptance failure remains; A/B falsified the protocols-owned cause
 - Blocker: Codex 0.144.1 exec JSON omitted spawn/child command items and leaked both exact root Ward families
 - Commits: included in this atomic blocked-iteration record
+
+## 006 - 2026-07-11
+- Start: 1 native Codex missing-type initialization failure
+- Target: authoritative Codex discriminator, fail-closed host mapping, and typed app-server acceptance
+- Result: 36/36 deterministic actor cases and full repository gate passed; 1 live acceptance failure remains
+- Blocker: two bounded app-server runs proved child identity, allowed `rg`, Ward denial, and `codex-scout`, but the release gate did not fire and cleanup could not be proved
+- Commits: included in this atomic blocked-iteration record

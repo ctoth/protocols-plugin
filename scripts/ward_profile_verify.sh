@@ -15,6 +15,7 @@ SID="wp-actor-family-$$"
 SCOUT_ID="scout-$$"
 EXP_ID="experiment-$$"
 CODEX_ID="native-codex-scout"
+CODEX_MISSING_ID="native-codex-missing-$$"
 UNKNOWN_ID="unknown-$$"
 MISSING_ID="missing-$$"
 REPO="$(mktemp -d)"
@@ -82,6 +83,14 @@ if ! start_role "$CODEX_ID" default; then
   echo "native Codex default role failed to initialize"
   fail=1
 fi
+if ! jq -cn --arg sid "$SID" --arg agent "$CODEX_MISSING_ID" \
+    '{hook_event_name:"SubagentStart",turn_id:"codex-turn-observed",session_id:$sid,
+      transcript_path:null,cwd:"C:/fixture",model:"gpt-5",permission_mode:"never",
+      agent_id:$agent}' |
+    CLAUDE_PLUGIN_ROOT="$ROOT/plugins/protocols" WARD_BIN="$WARD_BIN" bash "$ROLE_HOOK" >/dev/null; then
+  echo "native Codex missing-type role failed to initialize"
+  fail=1
+fi
 if start_role "$UNKNOWN_ID" general-purpose 2>/dev/null; then
   echo "unknown role unexpectedly initialized"
   fail=1
@@ -119,6 +128,8 @@ run_case "native Codex rg preprocessor denied" Bash "rg --pre 'touch report.md' 
 run_case "native Codex shell write denied" Bash "touch report.md" "$CODEX_ID" default "" DENY
 run_case "native Codex output redirection denied" Bash "rg --files > report.md" "$CODEX_ID" default "" DENY
 run_case "native Codex command substitution denied" Bash 'rg "$(touch report.md)"' "$CODEX_ID" default "" DENY
+run_case "native Codex missing type rg allowed" Bash "rg --files" "$CODEX_MISSING_ID" "" "" ALLOW
+run_case "native Codex missing type write denied" Bash "Set-Content -Path report.md -Value changed" "$CODEX_MISSING_ID" "" "" DENY
 run_case "uninitialized Bash denied" Bash "git status" "$UNKNOWN_ID" general-purpose "" DENY
 run_case "uninitialized Edit denied" Edit "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/source.txt" DENY
 run_case "uninitialized Write denied" Write "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/report.md" DENY
