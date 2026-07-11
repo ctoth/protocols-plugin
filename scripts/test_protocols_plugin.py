@@ -66,6 +66,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
             "experiment-worker",
         ):
             self.assertIn(role, role_hook)
+            self.assertIn(f"protocols:{role}", role_hook)
         self.assertIn('"$WARD_BIN" set', role_hook)
         self.assertIn("--hook-input", role_hook)
         self.assertIn('"$WARD_BIN" start-actor', role_hook)
@@ -142,6 +143,8 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("scout", acceptance)
         self.assertIn("experiment-worker", acceptance)
         self.assertIn("parallel", acceptance.lower())
+        self.assertIn("ward.exe set foreman", acceptance)
+        self.assertIn("ward: phase", acceptance)
 
 
 if __name__ == "__main__":

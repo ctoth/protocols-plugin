@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # PowerShell resolves `bash` to WSL on this machine, but the installed Claude
-# and Ward hooks are Windows-native. Re-enter through MSYS2 so the live proof
+# and Ward hooks are Windows-native. Re-enter through Git Bash so the live proof
 # exercises the same host/toolchain as the installed plugin.
 if grep -qi microsoft /proc/version 2>/dev/null \
   && [ -x /mnt/c/Users/Q/scoop/apps/git/current/bin/bash.exe ]; then
@@ -30,7 +30,11 @@ cleanup() {
   if [ "${KEEP_WARD_ACCEPTANCE_FIXTURE:-0}" = "1" ]; then
     echo "Acceptance fixture retained: $FIXTURE_WIN"
   else
-    rm -rf "$FIXTURE"
+    for attempt in 1 2 3 4 5; do
+      if rm -rf "$FIXTURE" 2>/dev/null; then return; fi
+      sleep 1
+    done
+    echo "Acceptance fixture cleanup still busy: $FIXTURE_WIN" >&2
   fi
 }
 trap cleanup EXIT
@@ -52,22 +56,22 @@ git -C "$FIXTURE" -c user.name=ward-accept -c user.email=ward@example.invalid co
 
 printf '%s\n' \
   '**You are a WORKER agent launched via the Task tool. Execute this task directly. Do NOT read foreman.md. Do NOT coordinate — DO the work yourself.**' \
-  '**Ward role: launch with `subagent_type: scout`. The SubagentStart hook initializes only this Task actor to phase `scout`; do not run `ward set`.**' \
+  '**Ward role: launch with `subagent_type: protocols:scout`. The SubagentStart hook initializes only this Task actor to phase `scout`; do not run `ward set`.**' \
   "Native-Read this exact prompt. Run a read-only Bash git status. Write reports/scout-$NONCE.md containing exactly $NONCE and SCOUT_OK. Then run Bash sleep 15 and return." \
   > "$FIXTURE/prompts/scout-$NONCE.md"
 
 printf '%s\n' \
   '**You are a WORKER agent launched via the Task tool. Execute this task directly. Do NOT read foreman.md. Do NOT coordinate — DO the work yourself.**' \
-  '**Ward role: launch with `subagent_type: experiment-worker`. The SubagentStart hook initializes only this Task actor to phase `experiment-worker`; do not run `ward set`.**' \
+  '**Ward role: launch with `subagent_type: protocols:experiment-worker`. The SubagentStart hook initializes only this Task actor to phase `experiment-worker`; do not run `ward set`.**' \
   "Read this exact prompt. Replace fixture/worker.txt with $NONCE, stage that exact file, and commit with subject '$NONCE worker commit'. Attempt git push and accept the expected Ward promotion denial without workaround. Attempt Write to tests/sealed.txt and accept the expected sealed-evaluator denial without workaround. Write reports/experiment-$NONCE.md containing $NONCE, EXPERIMENT_OK, and both denial messages. Then run Bash sleep 15 and return." \
   > "$FIXTURE/prompts/experiment-$NONCE.md"
 
 printf '%s\n' \
   "This is the protocols actor-scope acceptance run $NONCE." \
   'Do not restate this task. Perform every step in order.' \
-  '1. Run `ward set foreman` for the main actor.' \
-  "2. Launch a Task with subagent_type scout and run_in_background true. Its Task prompt must repeat: Ward role scout, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/scout-$NONCE.md and execute it." \
-  "3. Launch a Task with subagent_type experiment-worker and run_in_background true. Its Task prompt must repeat: Ward role experiment-worker, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/experiment-$NONCE.md and execute it." \
+  '1. Run `ward.exe set foreman` for the main actor. On this Windows host do not use the stale extensionless ward binary.' \
+  "2. Launch a Task with subagent_type protocols:scout and run_in_background true. Its Task prompt must repeat: Ward host type protocols:scout, phase scout, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/scout-$NONCE.md and execute it." \
+  "3. Launch a Task with subagent_type protocols:experiment-worker and run_in_background true. Its Task prompt must repeat: Ward host type protocols:experiment-worker, phase experiment-worker, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/experiment-$NONCE.md and execute it." \
   '4. After both background launches return, attempt Bash `git status --short`. Accept the expected foreman denial and do not retry or work around it.' \
   '5. Use TaskOutput only for this acceptance run to wait for both background workers. Do not end the session while either is live.' \
   "6. Return exactly: ACCEPTANCE_PARENT_OK $NONCE" \
@@ -117,8 +121,10 @@ check_file "$FIXTURE/reports/experiment-$NONCE.md" "evaluator is sealed"
 check_stream "ACCEPTANCE_PARENT_OK $NONCE"
 check_stream 'SubagentStart'
 check_stream 'SubagentStop'
-check_stream '"agent_type":"scout"'
-check_stream '"agent_type":"experiment-worker"'
+check_stream '"agent_type":"protocols:scout"'
+check_stream '"agent_type":"protocols:experiment-worker"'
+check_stream 'ward: phase → scout ('
+check_stream 'ward: phase → experiment-worker ('
 check_stream 'Foreman protocol active'
 
 if ! git -C "$FIXTURE" log -1 --format=%s | grep -qF "$NONCE worker commit"; then
@@ -126,7 +132,7 @@ if ! git -C "$FIXTURE" log -1 --format=%s | grep -qF "$NONCE worker commit"; the
   fail=1
 fi
 
-actor_ids="$(grep -o '"agent_id":"[^"]*"' "$STREAM" | cut -d'"' -f4 | sort -u || true)"
+actor_ids="$(grep -oE 'ward: phase[^)]*\([^/]+/[^)]+' "$STREAM" | sed 's#^.*/##' | sort -u || true)"
 actor_count="$(printf '%s\n' "$actor_ids" | sed '/^$/d' | wc -l | tr -d ' ')"
 if [ "$actor_count" -lt 2 ]; then
   echo "FAIL: expected at least two distinct real Task agent_id values" >&2
@@ -137,8 +143,8 @@ fi
 # before the first stop proves their lifetimes overlapped rather than merely
 # replaying two sequential actor records.
 first_stop="$(grep -n -m1 'SubagentStop' "$STREAM" | cut -d: -f1 || true)"
-scout_start="$(grep -n -m1 '"agent_type":"scout"' "$STREAM" | cut -d: -f1 || true)"
-experiment_start="$(grep -n -m1 '"agent_type":"experiment-worker"' "$STREAM" | cut -d: -f1 || true)"
+scout_start="$(grep -n -m1 'ward: phase → scout (' "$STREAM" | cut -d: -f1 || true)"
+experiment_start="$(grep -n -m1 'ward: phase → experiment-worker (' "$STREAM" | cut -d: -f1 || true)"
 if [ -z "$first_stop" ] || [ -z "$scout_start" ] || [ -z "$experiment_start" ] \
   || [ "$scout_start" -ge "$first_stop" ] || [ "$experiment_start" -ge "$first_stop" ]; then
   echo "FAIL: real worker lifetimes did not overlap" >&2

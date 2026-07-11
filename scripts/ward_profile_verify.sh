@@ -74,8 +74,8 @@ unset WARD_RULES_PATH WARD_SESSION WARD_ACTOR_ID
 "$WARD_BIN" validate
 "$WARD_BIN" set foreman --session "$SID" >/dev/null
 
-start_role "$SCOUT_ID" scout
-start_role "$EXP_ID" experiment-worker
+start_role "$SCOUT_ID" protocols:scout
+start_role "$EXP_ID" protocols:experiment-worker
 if start_role "$UNKNOWN_ID" general-purpose 2>/dev/null; then
   echo "unknown role unexpectedly initialized"
   fail=1
@@ -86,11 +86,11 @@ run_case "manager Edit denied" Edit "" "" "" "$REPO_WIN/source.txt" DENY
 run_case "manager non-prompt Write denied" Write "" "" "" "$REPO_WIN/report.md" DENY
 run_case "manager Task dispatch allowed" Task "" "" "" "" ALLOW
 run_case "manager Codex dispatch allowed" Bash "codex exec review" "" "" "" ALLOW
-run_case "scout Bash allowed" Bash "git status" "$SCOUT_ID" scout "" ALLOW
-run_case "scout report Write allowed" Write "" "$SCOUT_ID" scout "$REPO_WIN/reports/scout.md" ALLOW
-run_case "experiment commit allowed" Bash "git commit -m fixture" "$EXP_ID" experiment-worker "" ALLOW
-run_case "experiment promotion denied" Bash "git push" "$EXP_ID" experiment-worker "" DENY
-run_case "experiment evaluator Write denied" Write "" "$EXP_ID" experiment-worker "$REPO_WIN/tests/gold.txt" DENY
+run_case "scout Bash allowed" Bash "git status" "$SCOUT_ID" protocols:scout "" ALLOW
+run_case "scout report Write allowed" Write "" "$SCOUT_ID" protocols:scout "$REPO_WIN/reports/scout.md" ALLOW
+run_case "experiment commit allowed" Bash "git commit -m fixture" "$EXP_ID" protocols:experiment-worker "" ALLOW
+run_case "experiment promotion denied" Bash "git push" "$EXP_ID" protocols:experiment-worker "" DENY
+run_case "experiment evaluator Write denied" Write "" "$EXP_ID" protocols:experiment-worker "$REPO_WIN/tests/gold.txt" DENY
 run_case "uninitialized Bash denied" Bash "git status" "$UNKNOWN_ID" general-purpose "" DENY
 run_case "uninitialized Edit denied" Edit "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/source.txt" DENY
 run_case "uninitialized Write denied" Write "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/report.md" DENY
@@ -99,7 +99,7 @@ run_case "uninitialized native Read allowed" Read "" "$UNKNOWN_ID" general-purpo
 jq -cn --arg sid "$SID" --arg agent "$SCOUT_ID" \
   '{hook_event_name:"SubagentStop",session_id:$sid,agent_id:$agent}' | "$WARD_BIN" end-actor >/dev/null
 run_case "manager remains foreman after scout stop" Bash "git status" "" "" "" DENY
-run_case "experiment survives scout stop" Bash "git push" "$EXP_ID" experiment-worker "" DENY
+run_case "experiment survives scout stop" Bash "git push" "$EXP_ID" protocols:experiment-worker "" DENY
 
 jq -cn --arg sid "$SID" --arg agent "$EXP_ID" \
   '{hook_event_name:"SubagentStop",session_id:$sid,agent_id:$agent}' | "$WARD_BIN" end-actor >/dev/null

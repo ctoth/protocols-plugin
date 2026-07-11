@@ -16,7 +16,8 @@ allowed-tools:
   - Bash
 ---
 
-**First:** Run `ward set foreman`. This sets only the main actor's Ward phase.
+**First:** Run `ward set foreman` (`ward.exe set foreman` from Windows-hosted
+Git Bash). This sets only the main actor's Ward phase.
 It never initializes a Task worker or CLI worker. Each worker must have its own
 actor record as described below.
 
@@ -49,9 +50,11 @@ Ask: "Is this execution or coordination?"
 
 **"Explain X" or "tell me about Y" = dispatch a scout.** Frustration or urgency is not permission to break protocol.
 
-**Dispatch an explicit supported protocol role agent** — `subagent_type: scout`,
-`coder`, `analyst`, `verifier`, or `experiment-worker`. The plugin's
-`SubagentStart` hook maps that exact type to the same actor-local Ward phase.
+**Dispatch an explicit supported protocol role agent** —
+`subagent_type: protocols:scout`, `protocols:coder`, `protocols:analyst`,
+`protocols:verifier`, or `protocols:experiment-worker`. Claude namespaces
+plugin-defined agents; the plugin's SubagentStart hook maps each exact host type
+to the corresponding unprefixed actor-local Ward phase.
 Never dispatch `general-purpose`, Explore, Plan, or another generic type under
 this protocol: unknown Task types remain `uninitialized` and Ward denies their
 Bash/Edit/Write until they are relaunched with a supported role.

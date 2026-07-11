@@ -40,11 +40,11 @@ guard state independent from the main manager and sibling workers.
 
 | Agent | `subagent_type` | Tools | Role |
 |-------|-----------------|-------|------|
-| **scout** | `scout` | Read, Glob, Grep, Bash, Write (no Edit) | Survey the codebase, cite `file:line`, do not implement |
-| **coder** | `coder` | Read, Glob, Grep, Bash, Edit, Write | Implement the plan with full TDD; commit own work |
-| **analyst** | `analyst` | Read, Glob, Grep, Bash, Write (no Edit) | Find problems — edge cases, security, races; do not fix |
-| **verifier** | `verifier` | Read, Glob, Grep, Bash, Write (no Edit) | Gate the merge; default NO-MERGE |
-| **experiment worker** | `experiment-worker` | Read, Glob, Grep, Bash, Edit, Write | Run one isolated experiment; never promote itself |
+| **scout** | `protocols:scout` | Read, Glob, Grep, Bash, Write (no Edit) | Survey the codebase, cite `file:line`, do not implement |
+| **coder** | `protocols:coder` | Read, Glob, Grep, Bash, Edit, Write | Implement the plan with full TDD; commit own work |
+| **analyst** | `protocols:analyst` | Read, Glob, Grep, Bash, Write (no Edit) | Find problems — edge cases, security, races; do not fix |
+| **verifier** | `protocols:verifier` | Read, Glob, Grep, Bash, Write (no Edit) | Gate the merge; default NO-MERGE |
+| **experiment worker** | `protocols:experiment-worker` | Read, Glob, Grep, Bash, Edit, Write | Run one isolated experiment; never promote itself |
 
 These agents are Claude-only. Codex and Gemini do not load Claude plugin agents — they
 consume the equivalent doctrine from the `gauntlet` and `subagent` skills' prose.
@@ -61,7 +61,8 @@ Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mech
 2. This plugin's **SessionStart** hook validates and installs the bundled
    `protocols-gates` profile; failure is surfaced instead of silently disabling
    enforcement.
-3. The main manager alone runs `ward set foreman`, which changes actor `main`.
+3. The main manager alone runs `ward set foreman` (`ward.exe set foreman` from
+   Windows-hosted Git Bash), which changes actor `main`.
 4. This plugin's **SubagentStart** hook maps supported Claude `agent_type`
    values to actor-local phases. Unknown/generic Task types remain
    `uninitialized`, where Bash/Edit/Write fail closed while native Read remains
@@ -69,9 +70,12 @@ Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mech
 5. Ward gate rules evaluate each actor's independent phase, history, signals,
    and path ownership on every tool call.
 
-The exact Task mapping is `scout -> scout`, `coder -> coder`, `analyst ->
-analyst`, `verifier -> verifier`, `researcher -> researcher`, `adversary ->
-adversary`, and `experiment-worker -> experiment-worker`. A physical prompt
+Claude exposes plugin agent types with a `protocols:` prefix. The exact logical
+Task mapping is `protocols:scout -> scout`, `protocols:coder -> coder`,
+`protocols:analyst -> analyst`, `protocols:verifier -> verifier`,
+`protocols:researcher -> researcher`, `protocols:adversary -> adversary`, and
+`protocols:experiment-worker -> experiment-worker`. Bare values are accepted
+only for hosts that emit them without plugin qualification. A physical prompt
 and its Task launch parameter must both name the same supported type. Task
 workers never run a session-global transition.
 

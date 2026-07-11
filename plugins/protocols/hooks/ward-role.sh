@@ -22,9 +22,13 @@ input="$(cat)"
 agent_type="$(printf '%s' "$input" | jq -er '.agent_type | select(type == "string" and length > 0)' 2>/dev/null || true)"
 
 case "$agent_type" in
-    scout|coder|analyst|verifier|researcher|adversary|experiment-worker)
-        phase="$agent_type"
-        ;;
+    scout|protocols:scout) phase=scout ;;
+    coder|protocols:coder) phase=coder ;;
+    analyst|protocols:analyst) phase=analyst ;;
+    verifier|protocols:verifier) phase=verifier ;;
+    researcher|protocols:researcher) phase=researcher ;;
+    adversary|protocols:adversary) phase=adversary ;;
+    experiment-worker|protocols:experiment-worker) phase=experiment-worker ;;
     *)
         # Preserve Ward's fail-closed actor record even when the launch used an
         # unknown or generic Task type. The launcher must select a supported role.

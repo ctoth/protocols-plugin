@@ -34,7 +34,7 @@ event() { # command, optional agent id/type
 
 run_case() { # description, command, agent id, expected
   local out got
-  out="$(event "$2" "$3" "experiment-worker" | "$WARD_BIN" eval -v 2>&1)"
+  out="$(event "$2" "$3" "protocols:experiment-worker" | "$WARD_BIN" eval -v 2>&1)"
   got="ALLOW"
   if printf '%s' "$out" | grep -q 'permissionDecision.*deny'; then got="DENY"; fi
   printf '=== %s\n    expected: %s   got: %s\n' "$1" "$4" "$got"

@@ -190,14 +190,15 @@ Every experiment must have:
    every later claim is judged against.
 5. Enter a dedicated experiment branch. For a Claude Task worker, the
    dispatcher must prepare the branch/worktree before launching the explicit
-   `experiment-worker` agent because its Ward restrictions are active from
-   SubagentStart. For a direct Codex/Gemini worker, create/enter the branch
+   `protocols:experiment-worker` agent because its Ward restrictions are active
+   from SubagentStart. For a direct Codex/Gemini worker, create/enter the branch
    before launching the CLI.
 6. Confirm actor-local enforcement. A Claude Task worker is already in phase
    `experiment-worker` and must not run `ward set`. A direct CLI launch must
    have unique `WARD_SESSION` and `WARD_ACTOR_ID` values and must run
-   `ward set experiment-worker` before changes. That command changes only the
-   CLI actor record. The phase mechanically blocks the worker from
+   `ward set experiment-worker` before changes (`ward.exe set
+   experiment-worker` from Windows-hosted Git Bash). That command changes only
+   the CLI actor record. The phase mechanically blocks the worker from
    pushing, merging, rebasing, cherry-picking, or switching the integration
    branch, and blocks Edit/Write to common evaluator directories as a
    tripwire. Bash-mediated evaluator changes are not gate-blocked; they are
