@@ -1,4 +1,4 @@
 when: >
-  session.phase == "uninitialized" && tool in ["Bash", "Edit", "Write"]
+  session.phase == "uninitialized" && tool in ["Bash", "Edit", "Write", "PowerShell", "NotebookEdit"]
 action: deny
 message: "Protocol worker role initialization failed. This actor remains uninitialized and may only use native read-only discovery tools. Relaunch it with a supported explicit agent_type."
