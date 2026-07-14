@@ -175,7 +175,7 @@ so the new lifecycle hook chain is loaded.
 
 - Protocols Claude and Codex native plugins `0.3.4`
 - `protocols-gates` Ward profile `0.3.4`
-- Ward revision `cea6f35bdc4dea1180f2bb879dcb3a66f430795d`, built from a clean committed tree
+- Ward revision `06f59c33051a6de948e75072a14d03c5494ffc37`, built from a clean committed tree
 - Ward lifecycle hooks: `PreToolUse eval`, `SubagentStart start-actor`,
   `SubagentStop end-actor`, and `SessionEnd end-session`, each installed by
   `ward install`

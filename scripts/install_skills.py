@@ -28,7 +28,7 @@ from pathlib import Path
 
 MARKER_FILENAME = ".protocols-plugin-install.json"
 DEFAULT_PLATFORMS = ("codex", "claude", "gemini")
-REQUIRED_WARD_REVISION = "cea6f35bdc4dea1180f2bb879dcb3a66f430795d"
+REQUIRED_WARD_REVISION = "06f59c33051a6de948e75072a14d03c5494ffc37"
 REQUIRED_PROTOCOLS_VERSION = "0.3.4"
 CODEX_PROTOCOLS_PLUGIN_ID = "protocols@protocols-marketplace"
 CODEX_SESSION_HOOK_KEY = (
