@@ -831,11 +831,25 @@ def install_claude_plugins(
     installed = list_claude_plugins()
     for plugin in marketplace.plugins:
         plugin_id = f"{plugin.name}@{marketplace.name}"
-        if claude_plugin_installed(installed, plugin.name, marketplace.name) and not force:
+        installed_entry = next(
+            (
+                entry
+                for entry in installed
+                if entry.get("plugin") == plugin_id
+                and entry.get("scope", "").lower() == "user"
+            ),
+            None,
+        )
+        is_installed = installed_entry is not None
+        is_stale = bool(
+            installed_entry is not None
+            and installed_entry.get("version") != REQUIRED_PROTOCOLS_VERSION
+        )
+        if is_installed and not force and not is_stale:
             results.append((plugin.name, "unchanged"))
             continue
 
-        if force and claude_plugin_installed(installed, plugin.name, marketplace.name):
+        if is_installed and (force or is_stale):
             remove_result = run_cli(
                 claude_cli_cmd("plugin", "uninstall", plugin_id, "--scope", "user")
             )
@@ -853,7 +867,10 @@ def install_claude_plugins(
             f"claude plugin install {plugin_id}",
             accept_patterns=("already installed",),
         )
-        status = "installed" if install_result.returncode == 0 else "unchanged"
+        if install_result.returncode == 0:
+            status = "refreshed" if is_installed else "installed"
+        else:
+            status = "unchanged"
         if install_output:
             status = f"{status} ({install_output.splitlines()[0]})"
         results.append((plugin.name, status))

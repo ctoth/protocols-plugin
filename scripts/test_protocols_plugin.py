@@ -206,6 +206,34 @@ class ActorScopedWardContractTest(unittest.TestCase):
             installer.check_claude_plugin_compatibility(current, marketplace), []
         )
 
+    def test_claude_install_refreshes_a_stale_plugin_version(self) -> None:
+        installer = load_installer()
+        marketplace = installer.ClaudeMarketplace(
+            name="protocols-marketplace",
+            path=Path("marketplace.json"),
+            plugins=(installer.ClaudePlugin(name="protocols"),),
+        )
+        stale = [
+            {
+                "plugin": "protocols@protocols-marketplace",
+                "version": "0.3.3",
+                "scope": "user",
+                "status": "enabled",
+            }
+        ]
+        success = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+
+        with (
+            mock.patch.object(installer, "list_claude_plugins", return_value=stale),
+            mock.patch.object(installer, "run_cli", return_value=success) as run_cli,
+        ):
+            results = installer.install_claude_plugins(ROOT, marketplace, False)
+
+        commands = [call.args[0] for call in run_cli.call_args_list]
+        self.assertTrue(any("uninstall" in command for command in commands))
+        self.assertTrue(any("install" in command for command in commands))
+        self.assertIn(("protocols", "refreshed"), results)
+
     def test_codex_live_hook_requires_exact_trusted_active_handler(self) -> None:
         installer = load_installer()
         plugin_id = "protocols@protocols-marketplace"
