@@ -33,7 +33,7 @@ user skill roots.
 
 ## Agents
 
-The plugin ships five **Claude-native** tool-scoped agents in
+The plugin ships six **Claude-native** tool-scoped agents in
 `plugins/protocols/agents/`. Dispatch them via the Task tool with
 an explicit supported `subagent_type`. Their tool restriction is enforced by
 agent frontmatter, while Ward keeps each Task actor's protocol phase and mutable
@@ -45,6 +45,7 @@ guard state independent from the main manager and sibling workers.
 | **coder** | `protocols:coder` | Read, Glob, Grep, Bash, Edit, Write | Implement the plan with full TDD; commit own work |
 | **analyst** | `protocols:analyst` | Read, Glob, Grep, Bash, Write (no Edit) | Find problems — edge cases, security, races; do not fix |
 | **verifier** | `protocols:verifier` | Read, Glob, Grep, Bash, Write (no Edit) | Gate the merge; default NO-MERGE |
+| **researcher** | `protocols:researcher` | Read, Glob, Grep, read-only Bash, WebSearch, WebFetch, report Write (no Edit) | Investigate one focused question and write cited findings |
 | **experiment worker** | `protocols:experiment-worker` | Read, Glob, Grep, Bash, Edit, Write | Run one isolated experiment; never promote itself |
 
 These agents are Claude-only. Codex and Gemini do not load Claude plugin agents — they
@@ -68,11 +69,12 @@ Protocols that restrict tools use [ward](https://github.com/ctoth/ward) for mech
    Windows-hosted Git Bash), which changes actor `main`.
 4. This plugin's **SubagentStart** hook maps supported Claude `agent_type`
    values to actor-local protocol phases. It also maps native Codex
-   collaboration's exact, unselectable `default` sentinel, or an omitted type
-   accompanied by Codex's required non-empty `turn_id` extension, to the
-   distinct `codex-scout` discovery phase. Missing types without that Codex
-   discriminator and all unknown/generic types remain `uninitialized`, where
-   Bash/Edit/Write fail closed while native Read remains available for diagnosis.
+   collaboration's exact, unselectable `default` sentinel, an omitted type
+   accompanied by Codex's required non-empty `turn_id` extension, and known
+   generic host worker types to the distinct `codex-scout` discovery phase.
+   Missing types without that Codex discriminator and unknown types remain
+   `uninitialized`, where Bash/Edit/Write fail closed while native Read remains
+   available for diagnosis.
 5. Ward gate rules evaluate each actor's independent phase, history, signals,
    and path ownership on every tool call.
 
@@ -85,16 +87,18 @@ only for hosts that emit them without plugin qualification. A physical prompt
 and its Task launch parameter must both name the same supported type. Task
 workers never run a session-global transition.
 
-Native Codex collaboration workers are not direct CLI workers: the host gives
-them a stable `agent_id` and may send `agent_type=default` or omit the type.
-Codex's required non-empty `turn_id` lifecycle extension distinguishes the
-omitted-type native case from Claude Task. Ward does not infer a protocol role
-from prompt text, actor ID, or missing type alone. The hook assigns only the
-distinct `codex-scout` phase, which denies Edit and Write and limits Bash to
-parsed `rg` commands and the approved read-only Git queries (`status`, `diff`,
-`log`, `show`, and `rev-parse`), without redirection or command substitution.
-Missing types without `turn_id` and explicit unknown types do not receive this
-phase.
+Native Codex collaboration workers are not direct CLI workers: the current
+`spawn_agent` surface has no protocol-role selector. The host gives them a
+stable `agent_id` and may send `agent_type=default`, a known generic worker
+type, or omit the type. Codex's required non-empty `turn_id` lifecycle extension
+distinguishes the omitted-type native case from Claude Task. Ward does not infer
+a write-capable protocol role from prompt text, actor ID, task name, or missing
+type. The hook assigns only the distinct `codex-scout` phase, which denies Edit
+and Write and limits Bash to parsed `rg` commands and the approved read-only Git
+queries (`status`, `diff`, `log`, `show`, and `rev-parse`), without redirection
+or command substitution. A native child returns findings to its parent; the
+parent persists any required report. Missing types without `turn_id` and
+explicit unknown types do not receive this phase.
 
 Direct Codex/Gemini CLI workers are separate again: launch each with a unique
 `WARD_SESSION` and `WARD_ACTOR_ID`, then have that CLI worker run `ward set
@@ -108,7 +112,7 @@ run concurrent mechanically enforced roles.
 |------|-------|--------|
 | `foreman-gate.yaml` | `foreman` | Bash, Edit, Write (except prompts/ and notes-*) |
 | `adversary-gate.yaml` | `adversary` | Edit, Write, Bash |
-| `researcher-gate.yaml` | `researcher` | Edit (Write allowed for reports) |
+| `researcher-gate.yaml` | `researcher` | Edit/PowerShell, non-report Write, and Bash outside the read-only discovery grammar |
 | `experiment-gate.yaml` | `experiment-worker` | Integration-branch moves — `git push`, `merge`, `rebase`, `cherry-pick`, `pull`, `switch`/`checkout` (commit, add, branch, tag stay allowed; override: `ward allow experiment-promote`) |
 | `codex-scout-gate.yaml` | `codex-scout` | Edit, Write, and Bash outside the finite parsed read-only discovery grammar |
 | `uninitialized-worker-gate.yaml` | `uninitialized` | Bash, Edit, Write until a supported Task role is initialized |
@@ -169,8 +173,8 @@ so the new lifecycle hook chain is loaded.
 
 ## Required compatibility set
 
-- Protocols Claude and Codex native plugins `0.3.3`
-- `protocols-gates` Ward profile `0.3.3`
+- Protocols Claude and Codex native plugins `0.3.4`
+- `protocols-gates` Ward profile `0.3.4`
 - Ward revision `cea6f35bdc4dea1180f2bb879dcb3a66f430795d`, built from a clean committed tree
 - Ward lifecycle hooks: `PreToolUse eval`, `SubagentStart start-actor`,
   `SubagentStop end-actor`, and `SessionEnd end-session`, each installed by

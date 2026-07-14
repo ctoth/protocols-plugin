@@ -12,15 +12,28 @@ allowed-tools:
   - Write
 ---
 
-**First:** Run `ward set researcher` to activate enforcement for this session.
-
 # Researcher Mode Protocol
 
-Use when: Gathering information before implementation, exploring unfamiliar codebases/APIs, answering "how does X work" questions, building context for complex tasks.
+## Activate The Role By Host
+
+- **Claude Code Task:** Launch with `subagent_type: protocols:researcher`.
+  The SubagentStart hook initializes that Task actor to `researcher`. Do not run
+  `ward set`; write the requested report artifact directly.
+- **Native Codex collaboration:** The native `spawn_agent` surface does not
+  currently select a protocol agent type. Do not run `ward set`. Remain in the
+  mechanically read-only discovery phase, use the permitted discovery tools,
+  and return findings in the final response. The parent writes the filesystem
+  report. Do not substitute a generic child for a write-capable researcher.
+- **Main session or direct CLI:** Run `ward set researcher`. A concurrent direct
+  CLI worker must be launched with its own `WARD_SESSION` and `WARD_ACTOR_ID`
+  before running that command; never reuse the parent or a sibling identity.
 
 ## Core Principle
 
-Research is a PARALLEL phase. Multiple research agents can explore different domains simultaneously. Output goes to `docs/reports/` for later synthesis.
+Research is a PARALLEL phase. Multiple research agents can explore independent
+domains simultaneously. Explicit Claude researchers and actor-bound direct CLI
+researchers write to `docs/reports/`; native Codex collaboration workers return
+findings to the parent, which persists the same artifact.
 
 ## When to Use
 
@@ -91,7 +104,12 @@ If research hits unexpected behavior:
 
 As foreman during research:
 - Write prompt files to `prompts/research-*.md`
-- Dispatch via Task tool (subagent_type: general-purpose)
+- In Claude Code, dispatch `subagent_type: protocols:researcher`
+- For a direct Codex/Gemini CLI researcher, assign unique `WARD_SESSION` and
+  `WARD_ACTOR_ID` values and require `ward set researcher`
+- Do not use native Codex collaboration for a report-producing foreman phase;
+  its generic worker is intentionally discovery-only and the foreman cannot
+  write the returned report
 - Read reports from `docs/reports/`
 - Do NOT read source code directly - that's the researcher's job
 - Synthesize findings into plan

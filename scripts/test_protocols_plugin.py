@@ -41,8 +41,8 @@ class ActorScopedWardContractTest(unittest.TestCase):
         profile = (ROOT / "plugins/protocols/ward-profile/profile.yaml").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(manifest["version"], "0.3.3")
-        self.assertIn("version: 0.3.3", profile)
+        self.assertEqual(manifest["version"], "0.3.4")
+        self.assertIn("version: 0.3.4", profile)
         self.assertIn("actor-scoped-protocol-phases", profile)
 
     def test_subagent_start_hook_initializes_explicit_roles(self) -> None:
@@ -92,6 +92,10 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("default) phase=codex-scout", role_hook)
         self.assertIn("codex_turn_id", role_hook)
         self.assertIn('[ -z "$agent_type" ] && [ -n "$codex_turn_id" ]', role_hook)
+        self.assertIn(
+            "general-purpose|claude|investigator) phase=codex-scout", role_hook
+        )
+        self.assertNotIn("phase=worker", role_hook)
         self.assertNotIn("--session", role_hook)
 
     def test_native_codex_scout_is_mechanically_read_only(self) -> None:
@@ -116,7 +120,10 @@ class ActorScopedWardContractTest(unittest.TestCase):
             / "plugins/protocols/ward-profile/rules/uninitialized-worker-gate.yaml"
         ).read_text(encoding="utf-8")
         self.assertIn('session.phase == "uninitialized"', rule)
-        self.assertIn('tool in ["Bash", "Edit", "Write"]', rule)
+        self.assertIn(
+            'tool in ["Bash", "Edit", "Write", "PowerShell", "NotebookEdit"]',
+            rule,
+        )
         self.assertIn("role initialization", rule)
 
     def test_experiment_worker_agent_is_explicit(self) -> None:
@@ -127,13 +134,50 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("ward actor phase", agent.lower())
         self.assertNotIn("ward set experiment-worker", agent)
 
+    def test_researcher_agent_and_skills_use_host_bound_roles(self) -> None:
+        agent = (ROOT / "plugins/protocols/agents/researcher.md").read_text(
+            encoding="utf-8"
+        )
+        researcher = (
+            ROOT / "plugins/protocols/skills/researcher/SKILL.md"
+        ).read_text(encoding="utf-8")
+        phases = (ROOT / "plugins/protocols/skills/phases/SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        foreman = (ROOT / "plugins/protocols/skills/foreman/SKILL.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("name: researcher", agent)
+        self.assertIn("ward actor phase", agent.lower())
+        self.assertNotIn("ward set researcher", agent)
+        self.assertIn("Claude Code Task", researcher)
+        self.assertIn("native Codex collaboration", researcher)
+        self.assertIn("direct CLI", researcher)
+        self.assertNotIn("**First:** Run `ward set researcher`", researcher)
+        self.assertNotIn("subagent_type: general-purpose", researcher)
+        self.assertIn("protocols:researcher", phases)
+        self.assertIn("Native Codex collaboration", phases)
+        self.assertNotIn("Always dispatch via general-purpose", phases)
+        self.assertIn("protocols:researcher", foreman)
+
+    def test_researcher_gate_is_report_scoped_and_discovery_only(self) -> None:
+        rule = (
+            ROOT / "plugins/protocols/ward-profile/rules/researcher-gate.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertIn('session.phase == "researcher"', rule)
+        self.assertIn('tool in ["Edit", "NotebookEdit", "PowerShell"]', rule)
+        self.assertIn('input.file_path.contains("/reports/")', rule)
+        self.assertIn('c.name == "rg"', rule)
+        self.assertIn('c.git_category == "query"', rule)
+
     def test_doctor_owns_live_compatibility_checks(self) -> None:
         installer = load_installer()
         self.assertEqual(
             installer.REQUIRED_WARD_REVISION,
             "cea6f35bdc4dea1180f2bb879dcb3a66f430795d",
         )
-        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.3")
+        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.4")
         self.assertTrue(callable(installer.check_ward_compatibility))
         self.assertTrue(callable(installer.check_claude_plugin_compatibility))
         marketplace = installer.ClaudeMarketplace(
@@ -152,7 +196,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
         current = [
             {
                 "plugin": "protocols@protocols-marketplace",
-                "version": "0.3.3",
+                "version": "0.3.4",
                 "scope": "user",
                 "status": "enabled",
             }
@@ -197,7 +241,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
                             "pluginId": plugin_id,
                             "name": "protocols",
                             "marketplaceName": "protocols-marketplace",
-                            "version": "0.3.3",
+                            "version": "0.3.4",
                             "installed": True,
                             "enabled": True,
                             "source": {"path": str(plugin_root)},
@@ -277,13 +321,13 @@ class ActorScopedWardContractTest(unittest.TestCase):
 
     def test_codex_install_trusts_only_active_protocols_hooks_after_consent(self) -> None:
         installer = load_installer()
-        plugin_root = Path.home() / ".codex/plugins/cache/protocols-marketplace/protocols/0.3.3"
+        plugin_root = Path.home() / ".codex/plugins/cache/protocols-marketplace/protocols/0.3.4"
         entries = [
             {
                 "pluginId": installer.CODEX_PROTOCOLS_PLUGIN_ID,
                 "name": "protocols",
                 "marketplaceName": "protocols-marketplace",
-                "version": "0.3.3",
+                "version": "0.3.4",
                 "installed": True,
                 "enabled": True,
                 "source": {"path": str(plugin_root)},
@@ -418,7 +462,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
                         "pluginId": plugin_id,
                         "name": "protocols",
                         "marketplaceName": "protocols-marketplace",
-                        "version": "0.3.3",
+                        "version": "0.3.4",
                         "installed": True,
                         "enabled": True,
                         "source": {"path": "current-cache"},
@@ -550,6 +594,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("claude", acceptance)
         self.assertIn("--include-hook-events", acceptance)
         self.assertIn("scout", acceptance)
+        self.assertIn("researcher", acceptance)
         self.assertIn("experiment-worker", acceptance)
         self.assertIn("parallel", acceptance.lower())
         self.assertIn("ward.exe set foreman", acceptance)

@@ -13,9 +13,11 @@ PROFILE_DIR="${PROFILE_DIR:-$ROOT/plugins/protocols/ward-profile}"
 ROLE_HOOK="$ROOT/plugins/protocols/hooks/ward-role.sh"
 SID="wp-actor-family-$$"
 SCOUT_ID="scout-$$"
+RESEARCHER_ID="researcher-$$"
 EXP_ID="experiment-$$"
 CODEX_ID="native-codex-scout"
 CODEX_MISSING_ID="native-codex-missing-$$"
+GENERIC_ID="generic-$$"
 UNKNOWN_ID="unknown-$$"
 MISSING_ID="missing-$$"
 REPO="$(mktemp -d)"
@@ -78,6 +80,7 @@ unset WARD_RULES_PATH WARD_SESSION WARD_ACTOR_ID
 "$WARD_BIN" set foreman --session "$SID" >/dev/null
 
 start_role "$SCOUT_ID" protocols:scout
+start_role "$RESEARCHER_ID" protocols:researcher
 start_role "$EXP_ID" protocols:experiment-worker
 if ! start_role "$CODEX_ID" default; then
   echo "native Codex default role failed to initialize"
@@ -91,7 +94,11 @@ if ! jq -cn --arg sid "$SID" --arg agent "$CODEX_MISSING_ID" \
   echo "native Codex missing-type role failed to initialize"
   fail=1
 fi
-if start_role "$UNKNOWN_ID" general-purpose 2>/dev/null; then
+if ! start_role "$GENERIC_ID" general-purpose; then
+  echo "generic discovery role failed to initialize"
+  fail=1
+fi
+if start_role "$UNKNOWN_ID" mystery-worker 2>/dev/null; then
   echo "unknown role unexpectedly initialized"
   fail=1
 fi
@@ -109,6 +116,12 @@ run_case "manager Task dispatch allowed" Task "" "" "" "" ALLOW
 run_case "manager Codex dispatch allowed" Bash "codex exec review" "" "" "" ALLOW
 run_case "scout Bash allowed" Bash "git status" "$SCOUT_ID" protocols:scout "" ALLOW
 run_case "scout report Write allowed" Write "" "$SCOUT_ID" protocols:scout "$REPO_WIN/reports/scout.md" ALLOW
+run_case "researcher rg allowed" Bash "rg -n actor ." "$RESEARCHER_ID" protocols:researcher "" ALLOW
+run_case "researcher Git query allowed" Bash "git status" "$RESEARCHER_ID" protocols:researcher "" ALLOW
+run_case "researcher report Write allowed" Write "" "$RESEARCHER_ID" protocols:researcher "$REPO_WIN/docs/reports/research.md" ALLOW
+run_case "researcher source Write denied" Write "" "$RESEARCHER_ID" protocols:researcher "$REPO_WIN/source.go" DENY
+run_case "researcher Edit denied" Edit "" "$RESEARCHER_ID" protocols:researcher "$REPO_WIN/source.go" DENY
+run_case "researcher arbitrary Bash denied" Bash "curl https://example.com" "$RESEARCHER_ID" protocols:researcher "" DENY
 run_case "experiment commit allowed" Bash "git commit -m fixture" "$EXP_ID" protocols:experiment-worker "" ALLOW
 run_case "experiment promotion denied" Bash "git push" "$EXP_ID" protocols:experiment-worker "" DENY
 run_case "experiment evaluator Write denied" Write "" "$EXP_ID" protocols:experiment-worker "$REPO_WIN/tests/gold.txt" DENY
@@ -130,10 +143,12 @@ run_case "native Codex output redirection denied" Bash "rg --files > report.md" 
 run_case "native Codex command substitution denied" Bash 'rg "$(touch report.md)"' "$CODEX_ID" default "" DENY
 run_case "native Codex missing type rg allowed" Bash "rg --files" "$CODEX_MISSING_ID" "" "" ALLOW
 run_case "native Codex missing type write denied" Bash "Set-Content -Path report.md -Value changed" "$CODEX_MISSING_ID" "" "" DENY
-run_case "uninitialized Bash denied" Bash "git status" "$UNKNOWN_ID" general-purpose "" DENY
-run_case "uninitialized Edit denied" Edit "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/source.txt" DENY
-run_case "uninitialized Write denied" Write "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/report.md" DENY
-run_case "uninitialized native Read allowed" Read "" "$UNKNOWN_ID" general-purpose "$REPO_WIN/prompt.md" ALLOW
+run_case "generic discovery rg allowed" Bash "rg --files" "$GENERIC_ID" general-purpose "" ALLOW
+run_case "generic discovery Write denied" Write "" "$GENERIC_ID" general-purpose "$REPO_WIN/report.md" DENY
+run_case "uninitialized Bash denied" Bash "git status" "$UNKNOWN_ID" mystery-worker "" DENY
+run_case "uninitialized Edit denied" Edit "" "$UNKNOWN_ID" mystery-worker "$REPO_WIN/source.txt" DENY
+run_case "uninitialized Write denied" Write "" "$UNKNOWN_ID" mystery-worker "$REPO_WIN/report.md" DENY
+run_case "uninitialized native Read allowed" Read "" "$UNKNOWN_ID" mystery-worker "$REPO_WIN/prompt.md" ALLOW
 run_case "missing type remains uninitialized" Bash "git status" "$MISSING_ID" "" "" DENY
 
 jq -cn --arg sid "$SID" --arg agent "$SCOUT_ID" \

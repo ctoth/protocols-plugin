@@ -6,11 +6,31 @@ disable-model-invocation: false
 
 # Workflow Phases Protocol
 
-Use when: task decomposes into research/plan/implement/verify stages, context would overflow with full problem, want debuggable intermediate artifacts. Always dispatch via general-purpose agents with prompt files, never Explore/Plan agents.
+Use when: task decomposes into research/plan/implement/verify stages, context would overflow with full problem, want debuggable intermediate artifacts. Dispatch only through a host mechanism that can enforce the required phase authority.
 
 ## Core Concept
 
 Orchestrate via filesystem artifacts. No agent-to-agent communication. Foreman reads/writes the "message bus" (docs/).
+
+## Host-Conditional Dispatch
+
+- **Claude Code Task:** Write the prompt file, then launch an explicit plugin
+  role such as `protocols:researcher`, `protocols:coder`,
+  `protocols:analyst`, or `protocols:verifier`. The SubagentStart hook assigns
+  the actor-local Ward phase. Never use `general-purpose` as a role substitute,
+  and never tell a Task worker to run `ward set`.
+- **Native Codex collaboration:** `spawn_agent` currently has no protocol-role
+  selector. Its generic child is discovery-only. Tell it not to run `ward set`,
+  limit the assignment to read-only discovery, and have it return findings to
+  the parent. The parent persists those findings as the phase artifact. Do not
+  delegate implementation or filesystem-report writes through this surface.
+- **Direct Codex/Gemini CLI:** Give every worker a unique `WARD_SESSION` and
+  `WARD_ACTOR_ID`, name the required phase in its physical prompt and CLI
+  prompt, and have it run `ward set <phase>` before work.
+
+If the host cannot express the authority required by a phase, run that phase in
+the parent or use an explicitly actor-bound direct CLI worker. Do not infer a
+role from a task name or prompt text.
 
 ## Phase Types
 

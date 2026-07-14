@@ -40,10 +40,11 @@ else
         experiment-worker|protocols:experiment-worker) phase=experiment-worker ;;
         # A delegated foreman gets the foreman gate, same as a main-session foreman.
         foreman|protocols:foreman) phase=foreman ;;
-        # Host built-in read-write worker types: full-capability phase (no gate),
-        # same standing as coder/scout. Their own agent tool lists still apply.
-        general-purpose|claude|investigator) phase=worker ;;
-        # Host built-in read-only/discovery types: discovery-only phase.
+        # Generic host workers carry no explicit protocol-role authority. Keep
+        # them useful for discovery without granting implementation or report
+        # writes. A write-capable phase requires a named protocol agent type.
+        general-purpose|claude|investigator) phase=codex-scout ;;
+        # Host built-in read-only/discovery types use the same discovery phase.
         Explore|Plan|claude-code-guide) phase=codex-scout ;;
         # Native Codex collaboration may expose this exact, unselectable sentinel.
         # It receives a distinct discovery-only phase; this does not infer a
@@ -51,7 +52,7 @@ else
         default) phase=codex-scout ;;
         *)
             # Preserve Ward's fail-closed actor record even when the launch used an
-            # unknown or generic Task type. The launcher must select a supported role.
+            # unknown Task type. The launcher must select a supported role.
             printf '%s' "$input" | "$WARD_BIN" start-actor
             echo "protocols: unsupported agent_type '${agent_type:-<missing>}'; actor remains uninitialized" >&2
             exit 1

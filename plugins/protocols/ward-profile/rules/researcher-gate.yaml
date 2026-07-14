@@ -1,4 +1,28 @@
 when: >
-  session.phase == "researcher" && tool == "Edit"
+  session.phase == "researcher" && (
+    tool in ["Edit", "NotebookEdit", "PowerShell"] ||
+    (tool == "Write" && !(
+      "file_path" in input && input.file_path.contains("/reports/")
+    )) ||
+    (tool == "Bash" && (
+      !("commands" in input
+        && size(input.commands) > 0
+        && input.commands.all(c,
+          (c.name == "rg"
+            && !c.args.exists(a, a == "--pre" || a.startsWith("--pre="))) ||
+          (c.name == "git"
+            && c.git_category == "query"
+            && c.git_subcommand in ["status", "diff", "log", "show", "rev-parse"]
+            && !c.args.exists(a,
+              a == "-c" ||
+              a.startsWith("--config-env") ||
+              a == "--ext-diff" ||
+              a == "--textconv" ||
+              a == "--output" ||
+              a.startsWith("--output="))))) ||
+      !("command" in input) ||
+      input.command.matches(".*([<>`]|\\$\\().*")
+    ))
+  )
 action: deny
-message: "Researcher protocol active. Write new files (reports), don't edit existing code."
+message: "Researcher protocol active. Discovery is read-only: use native read tools, rg, or approved read-only Git queries; Write is limited to reports/."

@@ -87,6 +87,12 @@ printf '%s\n' \
 
 printf '%s\n' \
   '**You are a WORKER agent launched via the Task tool. Execute this task directly. Do NOT read foreman.md. Do NOT coordinate — DO the work yourself.**' \
+  '**Ward role: launch with `subagent_type: protocols:researcher`. The SubagentStart hook initializes only this Task actor to phase `researcher`; do not run `ward set`.**' \
+  "Native-Read this exact prompt. Run Bash rg -n baseline fixture/worker.txt. Attempt native Write to fixture/worker.txt and accept the expected Researcher protocol denial without workaround. Write reports/researcher-$NONCE.md containing $NONCE, RESEARCHER_OK, and the denial message. Then run Bash rg --files and return." \
+  > "$FIXTURE/prompts/researcher-$NONCE.md"
+
+printf '%s\n' \
+  '**You are a WORKER agent launched via the Task tool. Execute this task directly. Do NOT read foreman.md. Do NOT coordinate — DO the work yourself.**' \
   '**Ward role: launch with `subagent_type: protocols:experiment-worker`. The SubagentStart hook initializes only this Task actor to phase `experiment-worker`; do not run `ward set`.**' \
   "Read this exact prompt. Replace fixture/worker.txt with $NONCE, stage that exact file, and commit with subject '$NONCE worker commit'. Attempt git push and accept the expected Ward promotion denial without workaround. Attempt Write to tests/sealed.txt and accept the expected sealed-evaluator denial without workaround. Write reports/experiment-$NONCE.md containing $NONCE, EXPERIMENT_OK, and both denial messages. Then run Bash sleep 15 and return." \
   > "$FIXTURE/prompts/experiment-$NONCE.md"
@@ -96,11 +102,12 @@ printf '%s\n' \
   'Do not restate this task. Perform every step in order.' \
   '1. Run `ward.exe set foreman` for the main actor. On this Windows host do not use the stale extensionless ward binary.' \
   "2. Launch a Task with subagent_type protocols:scout and run_in_background true. Its Task prompt must repeat: Ward host type protocols:scout, phase scout, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/scout-$NONCE.md and execute it." \
-  "3. Launch a Task with subagent_type protocols:experiment-worker and run_in_background true. Its Task prompt must repeat: Ward host type protocols:experiment-worker, phase experiment-worker, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/experiment-$NONCE.md and execute it." \
-  '4. After both background launches return, attempt Bash `git status --short`. Accept the expected foreman denial and do not retry or work around it.' \
-  "5. If and only if that Bash call was denied with the Foreman protocol message, use native Write to create notes-parent-$NONCE.md containing exactly $NONCE and PARENT_FOREMAN_DENIAL_OK." \
-  '6. Use TaskOutput only for this acceptance run to wait for both background workers. Do not end the session while either is live.' \
-  "7. Return exactly: ACCEPTANCE_PARENT_OK $NONCE" \
+  "3. Launch a Task with subagent_type protocols:researcher and run_in_background true. Its Task prompt must repeat: Ward host type protocols:researcher, phase researcher, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/researcher-$NONCE.md and execute it." \
+  "4. Launch a Task with subagent_type protocols:experiment-worker and run_in_background true. Its Task prompt must repeat: Ward host type protocols:experiment-worker, phase experiment-worker, SubagentStart initializes only this Task actor, do not run ward set; then tell it to read @prompts/experiment-$NONCE.md and execute it." \
+  '5. After all three background launches return, attempt Bash `git status --short`. Accept the expected foreman denial and do not retry or work around it.' \
+  "6. If and only if that Bash call was denied with the Foreman protocol message, use native Write to create notes-parent-$NONCE.md containing exactly $NONCE and PARENT_FOREMAN_DENIAL_OK." \
+  '7. Use TaskOutput only for this acceptance run to wait for all three background workers. Do not end the session while any is live.' \
+  "8. Return exactly: ACCEPTANCE_PARENT_OK $NONCE" \
   > "$FIXTURE/prompts/parent-$NONCE.md"
 
 set +e
@@ -143,6 +150,9 @@ if [ "$claude_exit" -ne 0 ]; then
 fi
 check_file "$FIXTURE/reports/scout-$NONCE.md" "$NONCE"
 check_file "$FIXTURE/reports/scout-$NONCE.md" "SCOUT_OK"
+check_file "$FIXTURE/reports/researcher-$NONCE.md" "$NONCE"
+check_file "$FIXTURE/reports/researcher-$NONCE.md" "RESEARCHER_OK"
+check_file "$FIXTURE/reports/researcher-$NONCE.md" "Researcher protocol active"
 check_file "$FIXTURE/reports/experiment-$NONCE.md" "$NONCE"
 check_file "$FIXTURE/reports/experiment-$NONCE.md" "EXPERIMENT_OK"
 check_file "$FIXTURE/reports/experiment-$NONCE.md" "Experiment protocol active"
@@ -153,6 +163,7 @@ check_stream "ACCEPTANCE_PARENT_OK $NONCE"
 check_stream 'SubagentStart'
 check_stream 'SubagentStop'
 check_stream 'ward: phase → scout ('
+check_stream 'ward: phase → researcher ('
 check_stream 'ward: phase → experiment-worker ('
 
 if ! git -C "$FIXTURE" log -1 --format=%s | grep -qF "$NONCE worker commit"; then
@@ -162,8 +173,8 @@ fi
 
 actor_ids="$(grep -oE 'ward: phase[^)]*\([^/]+/[^)]+' "$STREAM" | sed 's#^.*/##' | sort -u || true)"
 actor_count="$(printf '%s\n' "$actor_ids" | sed '/^$/d' | wc -l | tr -d ' ')"
-if [ "$actor_count" -lt 2 ]; then
-  echo "FAIL: expected at least two distinct real Task agent_id values" >&2
+if [ "$actor_count" -lt 3 ]; then
+  echo "FAIL: expected at least three distinct real Task agent_id values" >&2
   fail=1
 fi
 
@@ -172,9 +183,11 @@ fi
 # replaying two sequential actor records.
 first_stop="$(grep -n -m1 'SubagentStop' "$STREAM" | cut -d: -f1 || true)"
 scout_start="$(grep -n -m1 'ward: phase → scout (' "$STREAM" | cut -d: -f1 || true)"
+researcher_start="$(grep -n -m1 'ward: phase → researcher (' "$STREAM" | cut -d: -f1 || true)"
 experiment_start="$(grep -n -m1 'ward: phase → experiment-worker (' "$STREAM" | cut -d: -f1 || true)"
-if [ -z "$first_stop" ] || [ -z "$scout_start" ] || [ -z "$experiment_start" ] \
-  || [ "$scout_start" -ge "$first_stop" ] || [ "$experiment_start" -ge "$first_stop" ]; then
+if [ -z "$first_stop" ] || [ -z "$scout_start" ] || [ -z "$researcher_start" ] \
+  || [ -z "$experiment_start" ] || [ "$scout_start" -ge "$first_stop" ] \
+  || [ "$experiment_start" -ge "$first_stop" ]; then
   echo "FAIL: real worker lifetimes did not overlap" >&2
   fail=1
 fi

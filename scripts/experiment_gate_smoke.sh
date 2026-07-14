@@ -50,6 +50,7 @@ run_case() { # description, command, agent id, expected
 
 run_case "worker git push denied" "git push" "$WORKER_ID" DENY
 run_case "worker git commit allowed" "git commit -m x" "$WORKER_ID" ALLOW
+"$WARD_BIN" set planning --session "$SID" --agent main >/dev/null
 run_case "main git push allowed" "git push" "" ALLOW
 run_case "worker remains restricted after main action" "git push" "$WORKER_ID" DENY
 

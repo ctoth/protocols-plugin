@@ -52,12 +52,20 @@ Ask: "Is this execution or coordination?"
 
 **Dispatch an explicit supported protocol role agent** —
 `subagent_type: protocols:scout`, `protocols:coder`, `protocols:analyst`,
-`protocols:verifier`, or `protocols:experiment-worker`. Claude namespaces
+`protocols:verifier`, `protocols:researcher`, or
+`protocols:experiment-worker`. Claude namespaces
 plugin-defined agents; the plugin's SubagentStart hook maps each exact host type
 to the corresponding unprefixed actor-local Ward phase.
-Never dispatch `general-purpose`, Explore, Plan, or another generic type under
-this protocol: unknown Task types remain `uninitialized` and Ward denies their
-Bash/Edit/Write until they are relaunched with a supported role.
+Never use `general-purpose`, Explore, Plan, or another generic type as a
+write-capable protocol role. Recognized generic discovery workers receive only
+the `codex-scout` read-only phase; unknown types remain `uninitialized`.
+
+Native Codex collaboration is conditional: its current `spawn_agent` surface
+does not expose a protocol-role selector, so its child can perform read-only
+discovery and return findings but cannot write the foreman's required report
+artifact. Do not tell that child to run `ward set`. For a report-producing or
+write-capable Codex phase, launch an actor-bound direct CLI worker as documented
+below.
 
 ## Structure
 
