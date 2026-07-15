@@ -246,7 +246,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
         installer = load_installer()
         self.assertEqual(
             installer.REQUIRED_WARD_REVISION,
-            "634d004ad79a4322302d48e49b711863a9131937",
+            "47d75e095c5e1fee143ca0a1dee1d8a90504b622",
         )
         self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.5")
         self.assertTrue(callable(installer.check_ward_compatibility))
