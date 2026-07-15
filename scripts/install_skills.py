@@ -43,6 +43,11 @@ REQUIRED_WARD_HOOKS = {
     "SubagentStop": "end-actor",
     "SessionEnd": "end-session",
 }
+REQUIRED_CODEX_WARD_HOOKS = {
+    "PreToolUse": "eval",
+    "SubagentStart": "start-actor",
+    "SubagentStop": "end-actor",
+}
 TOOLING_REQUIREMENTS = {
     "uv": {
         "required": True,
@@ -664,10 +669,10 @@ def installed_hook_commands(settings_path: Path) -> dict[str, list[str]]:
 
 def check_codex_ward_hooks(commands: dict[str, list[str]]) -> list[str]:
     failures: list[str] = []
-    for event_name, subcommand in REQUIRED_WARD_HOOKS.items():
+    for event_name, subcommand in REQUIRED_CODEX_WARD_HOOKS.items():
         if not any(
             re.search(
-                rf"(?:^|[/\\])ward(?:\.exe)?\s+{re.escape(subcommand)}(?:\s|$)",
+                rf"(?:^|[/\\])ward(?:\.exe)?[\"']?\s+{re.escape(subcommand)}(?:\s|$)",
                 command,
             )
             for command in commands.get(event_name, [])

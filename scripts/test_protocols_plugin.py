@@ -658,11 +658,12 @@ class ActorScopedWardContractTest(unittest.TestCase):
     def test_codex_ward_lifecycle_requires_all_user_hooks(self) -> None:
         installer = load_installer()
         commands = {
-            event: [f"C:/bin/ward.exe {subcommand}"]
-            for event, subcommand in installer.REQUIRED_WARD_HOOKS.items()
+            event: [f'"C:/bin/ward.exe" {subcommand}']
+            for event, subcommand in installer.REQUIRED_CODEX_WARD_HOOKS.items()
         }
         self.assertEqual(installer.check_codex_ward_hooks(commands), [])
-        for event_name in installer.REQUIRED_WARD_HOOKS:
+        self.assertNotIn("SessionEnd", installer.REQUIRED_CODEX_WARD_HOOKS)
+        for event_name in installer.REQUIRED_CODEX_WARD_HOOKS:
             with self.subTest(event_name=event_name):
                 incomplete = {**commands, event_name: []}
                 self.assertIn(
