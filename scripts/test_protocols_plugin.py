@@ -731,7 +731,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("ward-actor-acceptance", acceptance)
         self.assertIn("FIXTURE_LOCK", acceptance)
         self.assertIn("app-server", codex_acceptance)
-        self.assertIn("codex-cli 0.144.1", codex_app_server_acceptance)
+        self.assertIn("codex-cli 0.144.4", codex_app_server_acceptance)
         self.assertIn("fresh", codex_acceptance.lower())
         self.assertIn("WARD-DELEGATE/1 phase=researcher", codex_app_server_acceptance)
         self.assertIn("fork_turns", codex_app_server_acceptance)

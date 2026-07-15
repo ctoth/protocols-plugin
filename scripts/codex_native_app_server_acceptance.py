@@ -186,8 +186,8 @@ def main() -> None:
         capture_output=True,
         check=False,
     )
-    if version.returncode != 0 or version.stdout.strip() != "codex-cli 0.144.1":
-        raise RuntimeError(f"Expected codex-cli 0.144.1; found {version.stdout.strip()!r}")
+    if version.returncode != 0 or version.stdout.strip() != "codex-cli 0.144.4":
+        raise RuntimeError(f"Expected codex-cli 0.144.4; found {version.stdout.strip()!r}")
 
     if OUT.exists():
         resolved = OUT.resolve()
