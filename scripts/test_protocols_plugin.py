@@ -744,6 +744,8 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("explicit ward write denial", codex_app_server_acceptance.lower())
         self.assertIn("exact actor cleanup", codex_app_server_acceptance.lower())
         self.assertIn("exact session cleanup", codex_app_server_acceptance.lower())
+        self.assertIn('"007" / "live"', codex_app_server_acceptance)
+        self.assertIn('[ward, "end-session"]', codex_app_server_acceptance)
         self.assertNotIn("grep", codex_app_server_acceptance.lower())
         self.assertIn("do not run ward set", codex_app_server_acceptance.lower())
 

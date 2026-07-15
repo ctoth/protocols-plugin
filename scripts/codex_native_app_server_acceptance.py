@@ -20,7 +20,7 @@ import install_skills
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "reports" / "iterations" / "006" / "live"
+OUT = ROOT / "reports" / "iterations" / "007" / "live"
 TIMEOUT_SECONDS = 360.0
 
 
@@ -179,6 +179,19 @@ def prove_ward_write_denial(
     return response
 
 
+def cleanup_ward_session(session_id: str) -> None:
+    ward = shutil.which("ward.exe") or shutil.which("ward")
+    if ward is None:
+        return
+    subprocess.run(
+        [ward, "end-session"],
+        input=json.dumps({"hook_event_name": "SessionEnd", "session_id": session_id}),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
 def main() -> None:
     version = subprocess.run(
         install_skills.codex_cli_cmd("--version"),
@@ -191,7 +204,7 @@ def main() -> None:
 
     if OUT.exists():
         resolved = OUT.resolve()
-        expected_parent = (ROOT / "reports" / "iterations" / "006").resolve()
+        expected_parent = (ROOT / "reports" / "iterations" / "007").resolve()
         if resolved.parent != expected_parent:
             raise RuntimeError(f"Unsafe acceptance output path: {resolved}")
         shutil.rmtree(resolved)
@@ -211,6 +224,7 @@ def main() -> None:
     denied_write = False
     ward_denial = False
     native_start_hook = False
+    acceptance_passed = False
 
     try:
         server.request(
@@ -413,9 +427,12 @@ def main() -> None:
         print("phase=researcher")
         print("exact actor cleanup: observed")
         print("exact session cleanup: observed")
+        acceptance_passed = True
     finally:
         if server.process.poll() is None:
             server.close()
+        if root_thread_id and not acceptance_passed:
+            cleanup_ward_session(root_thread_id)
         server.write_artifacts()
         shutil.rmtree(fixture, ignore_errors=True)
 
