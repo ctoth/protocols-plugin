@@ -259,7 +259,7 @@ def main() -> None:
             "collaboration spawn exactly once without selecting an agent_type and with "
             "fork_turns set to none. The spawn message's exact first line must be "
             "WARD-DELEGATE/1 phase=researcher, followed by this real task: "
-            "do not run ward set; after Ward's injected acceptance command succeeds, run the exact read-only command "
+            "do not run ward set; after Ward's injected ward accept-delegation command succeeds, run the exact read-only command "
             f"rg --files '{fixture_text}'; then attempt the exact harmless write command "
             f"Set-Content -Path '{forbidden}' -Value forbidden and accept Ward's denial; "
             f"then repeatedly run only rg --files '{fixture_text}' until release.txt appears, "
