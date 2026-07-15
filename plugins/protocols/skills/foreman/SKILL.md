@@ -18,7 +18,7 @@ allowed-tools:
 
 **First:** Run `ward set foreman` (`ward.exe set foreman` from Windows-hosted
 Git Bash). This sets only the main actor's Ward phase.
-It never initializes a Task worker or CLI worker. Each worker must have its own
+It never initializes a Task, native Codex, or CLI worker. Each worker must have its own
 actor record as described below.
 
 # Foreman Protocol
@@ -40,7 +40,11 @@ Ask: "Is this execution or coordination?"
 - `Read` for `reports/*.md` and `~/.claude/CLAUDE.md.d/*.md` protocol files ONLY
 - `Task` to dispatch a single claude subagent, live and turn-by-turn
 - `Workflow` to dispatch a scripted multi-agent run — this is coordination (the agents do the work), not execution. See "Two Dispatch Mechanisms" below.
-- `Bash` ONLY to dispatch a CLI agent (Codex/Gemini) — this is dispatch, not execution. See "CLI agents are subagents" below.
+- Native Codex collaboration tools to dispatch, wait for, or send a genuine
+  follow-up to an internal-harness subagent.
+- `Bash` to dispatch an external CLI reviewer only when the current host is not
+  Codex or the user explicitly requested that external reviewer. See "External
+  CLI agents" below.
 
 **If about to use a blocked tool -> STOP -> Write prompt file -> Dispatch subagent**
 
@@ -60,12 +64,28 @@ Never use `general-purpose`, Explore, Plan, or another generic type as a
 write-capable protocol role. Recognized generic discovery workers receive only
 the `codex-scout` read-only phase; unknown types remain `uninitialized`.
 
-Native Codex collaboration is conditional: its current `spawn_agent` surface
-does not expose a protocol-role selector, so its child can perform read-only
-discovery and return findings but cannot write the foreman's required report
-artifact. Do not tell that child to run `ward set`. For a report-producing or
-write-capable Codex phase, launch an actor-bound direct CLI worker as documented
-below.
+Native Codex collaboration uses the internal collaboration harness. Its current
+`spawn_agent` surface does not expose a protocol-role selector, so Ward carries
+the parent's authority into the child with a one-use capability:
+
+1. Write the real task prompt to `prompts/*.md`.
+2. Call `spawn_agent` with `fork_turns: "none"`. Its message must start with
+   `WARD-DELEGATE/1 phase=<child-phase>` on a line by itself, followed by the
+   real task. The supported phases are `scout`, `coder`, `analyst`, `verifier`,
+   `researcher`, `adversary`, `experiment-worker`, and `codex-scout`.
+3. Ward evaluates that spawn under the parent's existing `foreman` actor phase.
+   On allow, Ward rewrites the child message with a five-minute one-use token
+   and the exact first command `ward accept-delegation <token>`.
+4. The child runs that command before any other action. Ward binds the phase
+   stored in the grant to the opaque child `agent_id`; the child never chooses
+   its phase and never runs `ward set`.
+5. Use `wait_agent` for ordinary completion. Use `followup_task` only for a
+   genuine follow-up after the initial task, never as an activation step.
+
+Issuance and redemption do not change Ward's active CLI actor binding, so there
+is no parent identity snapshot or restore command. An unrewritten request header
+is not authority. A Codex-hosted foreman must not self-launch `codex exec` as a
+substitute for the internal collaboration harness.
 
 ## Structure
 
@@ -157,11 +177,14 @@ hypotheses, coordinate them with the campaign protocol
 (`/protocols:campaign`) — a ledger-driven portfolio of experiment-protocol
 runs — rather than dispatching ad-hoc experiment workers.
 
-### CLI agents (Codex/Gemini) are subagents — run them directly
+### External CLI agents are separate reviewers
 
-A CLI reviewer (Codex, Gemini) IS a subagent. The foreman dispatches it the
-same way it dispatches a claude agent — the mechanism is just the CLI instead
-of the `Task` tool. Run it directly:
+A non-Codex host may intentionally use a Codex/Gemini CLI as an external
+reviewer. That is not the native Codex subagent path. A Codex-hosted foreman
+uses the internal activation sequence above and never starts its own Codex
+child with `codex exec`.
+
+When an external CLI reviewer is explicitly appropriate, run it directly:
 
 ```
 WARD_SESSION=cli-X WARD_ACTOR_ID=coder-X codex exec --dangerously-bypass-approvals-and-sandbox "Read prompts/X.md, run ward set coder, and write report to reports/X-report.md"
@@ -173,9 +196,9 @@ tell the worker to run `ward set <phase>` inside that environment. Codex and
 Gemini hooks then resolve the same actor record as the worker's command-side
 transition. Do not reuse the main Claude session or actor identity.
 
-Running a CLI agent is **dispatch — coordination, not execution.** It is the
-shell equivalent of the `Task` tool, and it is NOT the "Bash for code
-execution" that the HARD STOP blocks.
+Running an explicitly authorized external CLI reviewer is **dispatch —
+coordination, not execution.** It is not permission for a Codex parent to
+bypass its internal collaboration harness.
 
 **NEVER wrap a CLI agent inside a claude `Task` subagent.** That is
 double-dispatch: a claude agent spawned only to type a command is wasted

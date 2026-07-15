@@ -53,6 +53,25 @@ event() { # tool, command, agent id, agent type, file path
       + (if $type == "" then {} else {agent_type:$type} end)'
 }
 
+delegation_event() { # requested phase
+  jq -cn \
+    --arg sid "$SID" --arg cwd "$REPO_WIN" --arg phase "$1" \
+    --arg message "WARD-DELEGATE/1 phase=$1
+Perform the assigned worker task." \
+    '{hook_event_name:"PreToolUse",turn_id:"parent-turn",tool_name:"spawn_agent",
+      tool_use_id:("spawn-" + $phase),session_id:$sid,cwd:$cwd,
+      tool_input:{task_name:("worker-" + $phase),fork_turns:"none",message:$message}}'
+}
+
+acceptance_event() { # token, child actor id
+  jq -cn \
+    --arg sid "$SID" --arg cwd "$REPO_WIN" --arg token "$1" --arg agent "$2" \
+    '{hook_event_name:"PreToolUse",turn_id:"child-turn",tool_name:"PowerShell",
+      tool_use_id:"accept-delegation",session_id:$sid,cwd:$cwd,
+      agent_id:$agent,agent_type:"default",
+      tool_input:{command:("ward accept-delegation " + $token)}}'
+}
+
 start_role() { # agent id, agent type
   jq -cn --arg sid "$SID" --arg agent "$1" --arg type "$2" \
     '{hook_event_name:"SubagentStart",session_id:$sid,agent_id:$agent,agent_type:$type}' |
@@ -141,6 +160,49 @@ run_case "native Codex rg preprocessor denied" Bash "rg --pre 'touch report.md' 
 run_case "native Codex shell write denied" Bash "touch report.md" "$CODEX_ID" default "" DENY
 run_case "native Codex output redirection denied" Bash "rg --files > report.md" "$CODEX_ID" default "" DENY
 run_case "native Codex command substitution denied" Bash 'rg "$(touch report.md)"' "$CODEX_ID" default "" DENY
+delegation_out="$(delegation_event researcher | "$WARD_BIN" eval 2>&1)"
+delegation_token="$(printf '%s' "$delegation_out" | jq -r '
+  .hookSpecificOutput.updatedInput.message
+  | split("\n")
+  | map(select(startswith("ward accept-delegation ")))
+  | first
+  | ltrimstr("ward accept-delegation ")' 2>/dev/null || true)"
+if [ -z "$delegation_token" ] || [ "$delegation_token" = null ]; then
+  echo "native Codex researcher delegation did not return an updatedInput capability"
+  printf '    stdout: %s\n' "$delegation_out"
+  fail=1
+elif acceptance_out="$(acceptance_event "$delegation_token" "$CODEX_ID" | "$WARD_BIN" eval 2>&1)" \
+    && ! printf '%s' "$acceptance_out" | grep -q 'permissionDecision.*deny' \
+    && "$WARD_BIN" accept-delegation "$delegation_token" >/dev/null; then
+  echo "=== native Codex researcher capability accepted"
+  echo "    RESULT: OK"
+else
+  echo "native Codex researcher capability acceptance failed"
+  printf '    stdout: %s\n' "${acceptance_out:-}"
+  fail=1
+fi
+run_case "native Codex delegated researcher report Write allowed" Write "" "$CODEX_ID" default "$REPO_WIN/docs/reports/native-codex.md" ALLOW
+run_case "native Codex delegated researcher source Write denied" Write "" "$CODEX_ID" default "$REPO_WIN/source.go" DENY
+run_case "native Codex delegated child self-promotion denied" PowerShell "ward set coder" "$CODEX_ID" default "" DENY
+run_case "native Codex delegation leaves manager foreman binding unchanged" Bash "git status" "" "" "" DENY
+unsupported_out="$(delegation_event foreman | "$WARD_BIN" eval 2>&1)"
+if printf '%s' "$unsupported_out" | grep -q 'permissionDecision.*deny'; then
+  echo "=== unsupported native Codex delegated phase denied"
+  echo "    RESULT: OK"
+else
+  echo "unsupported native Codex delegated phase was allowed"
+  fail=1
+fi
+"$WARD_BIN" set implementing --session "$SID" --agent main >/dev/null
+unauthorized_out="$(delegation_event researcher | "$WARD_BIN" eval 2>&1)"
+if printf '%s' "$unauthorized_out" | grep -q 'permissionDecision.*deny'; then
+  echo "=== non-foreman native Codex delegation denied"
+  echo "    RESULT: OK"
+else
+  echo "non-foreman native Codex delegation was allowed"
+  fail=1
+fi
+"$WARD_BIN" set foreman --session "$SID" --agent main >/dev/null
 run_case "native Codex missing type rg allowed" Bash "rg --files" "$CODEX_MISSING_ID" "" "" ALLOW
 run_case "native Codex missing type write denied" Bash "Set-Content -Path report.md -Value changed" "$CODEX_MISSING_ID" "" "" DENY
 run_case "generic discovery rg allowed" Bash "rg --files" "$GENERIC_ID" general-purpose "" ALLOW

@@ -19,21 +19,25 @@ allowed-tools:
 - **Claude Code Task:** Launch with `subagent_type: protocols:researcher`.
   The SubagentStart hook initializes that Task actor to `researcher`. Do not run
   `ward set`; write the requested report artifact directly.
-- **Native Codex collaboration:** The native `spawn_agent` surface does not
-  currently select a protocol agent type. Do not run `ward set`. Remain in the
-  mechanically read-only discovery phase, use the permitted discovery tools,
-  and return findings in the final response. The parent writes the filesystem
-  report. Do not substitute a generic child for a write-capable researcher.
-- **Main session or direct CLI:** Run `ward set researcher`. A concurrent direct
-  CLI worker must be launched with its own `WARD_SESSION` and `WARD_ACTOR_ID`
+- **Native Codex collaboration:** Use the internal collaboration harness. The
+  `foreman` parent writes the physical prompt, then calls `spawn_agent` with
+  `fork_turns: "none"`. The message's first line is exactly
+  `WARD-DELEGATE/1 phase=researcher`; the real task follows it. Ward rewrites
+  the allowed spawn so the child's exact first action is
+  `ward accept-delegation <token>`, then binds `researcher` to the opaque host
+  actor ID. The child writes the report under that actor-local phase and never
+  runs `ward set`. No parent actor snapshot or binding restore is needed.
+  A Codex parent must not self-launch `codex exec` for this role.
+- **Main session or external CLI:** A main-session researcher runs `ward set
+  researcher`. A concurrent external CLI worker must be launched with its own
+  `WARD_SESSION` and `WARD_ACTOR_ID`
   before running that command; never reuse the parent or a sibling identity.
 
 ## Core Principle
 
 Research is a PARALLEL phase. Multiple research agents can explore independent
-domains simultaneously. Explicit Claude researchers and actor-bound direct CLI
-researchers write to `docs/reports/`; native Codex collaboration workers return
-findings to the parent, which persists the same artifact.
+domains simultaneously. Claude researchers, capability-authorized native Codex
+researchers, and actor-bound external CLI researchers write to `docs/reports/`.
 
 ## When to Use
 
@@ -105,11 +109,10 @@ If research hits unexpected behavior:
 As foreman during research:
 - Write prompt files to `prompts/research-*.md`
 - In Claude Code, dispatch `subagent_type: protocols:researcher`
-- For a direct Codex/Gemini CLI researcher, assign unique `WARD_SESSION` and
+- In Codex, use the `WARD-DELEGATE/1 phase=researcher` `spawn_agent` request
+  above with `fork_turns: "none"`; never use `codex exec` to create the child
+- For an external Codex/Gemini CLI researcher, assign unique `WARD_SESSION` and
   `WARD_ACTOR_ID` values and require `ward set researcher`
-- Do not use native Codex collaboration for a report-producing foreman phase;
-  its generic worker is intentionally discovery-only and the foreman cannot
-  write the returned report
 - Read reports from `docs/reports/`
 - Do NOT read source code directly - that's the researcher's job
 - Synthesize findings into plan

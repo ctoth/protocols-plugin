@@ -1,0 +1,17 @@
+when: >
+  "ward_delegation_phase" in input && !(
+    tool == "spawn_agent" &&
+    session.phase == "foreman" &&
+    input.ward_delegation_phase in [
+      "scout",
+      "coder",
+      "analyst",
+      "verifier",
+      "researcher",
+      "adversary",
+      "experiment-worker",
+      "codex-scout"
+    ]
+  )
+action: deny
+message: "Native Codex phase delegation requires a foreman parent and one supported worker phase. Use a WARD-DELEGATE/1 request through spawn_agent; the child cannot choose or promote its own phase."

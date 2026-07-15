@@ -61,7 +61,9 @@ Write spec changes to a draft file, NOT directly to the spec directory.
 
 ### Phase 3: Codex Review Gate
 
-External review by Codex CLI.
+Codex review uses the host-appropriate subagent path. A Codex parent uses the
+internal collaboration harness; a non-Codex host may use Codex CLI as an
+external reviewer.
 
 **Prompt file:** `prompts/review-spec-{feature}.md`
 ```markdown
@@ -84,7 +86,17 @@ Write review to `reports/codex-spec-review-{feature}.md`
 Include: APPROVE, CONCERNS, or REJECT with explanation
 ```
 
-**Command:**
+**Native Codex:**
+
+Write the prompt file, run `ward enter foreman` for the scoped review dispatch,
+and call `spawn_agent` with `fork_turns: "none"`. Its message starts with
+`WARD-DELEGATE/1 phase=verifier` on a line by itself, followed by the real
+review prompt. Ward rewrites the allowed spawn so the child's exact first
+action is `ward accept-delegation <token>` and binds `verifier` to the opaque
+child actor ID. Wait for ordinary completion, then run `ward leave`. The child
+never runs `ward set`. Do not self-launch `codex exec`.
+
+**External Codex command (non-Codex host only):**
 ```bash
 codex exec --dangerously-bypass-approvals-and-sandbox \
   "Read prompts/review-spec-{feature}.md and follow its instructions"

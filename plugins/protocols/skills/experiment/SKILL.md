@@ -1,6 +1,6 @@
 ---
 name: experiment
-description: Controlled benchmark experiment protocol for solver, performance, routing, and optimization work. Use when testing a hypothesis against metrics, comparing implementations, or deciding whether to promote or abandon a benchmark-driven change.
+description: Controlled benchmark protocol for one user-supplied or agent-generated hypothesis against a metric. Use for a single solver, performance, routing, or optimization experiment; use the campaign skill instead when multiple plausible hypotheses compete for the same goal.
 disable-model-invocation: false
 allowed-tools:
   - Read
@@ -20,6 +20,19 @@ that matters.
 For a portfolio of competing hypotheses against one goal metric, run the
 campaign protocol (`/protocols:campaign`); it dispatches this protocol once per
 confirmed candidate.
+
+## Protocol Selection Gate
+
+This protocol may test one user-supplied or agent-generated hypothesis. Before
+acting, search the current repo-local experiment ledger and ask whether other
+plausible hypotheses compete for the same goal. If several candidates compete,
+or this hypothesis was selected from alternatives, stop and use the campaign
+protocol. Do not spend an experiment budget confirming the first convenient
+idea.
+
+Record where the hypothesis came from and the repo-local prior-art search that
+supports trying it. If no relevant records or literature exist, record the
+completed search and `none found`; that is a valid clean prior.
 
 ## Core Rule
 
@@ -62,6 +75,11 @@ Promotion requires a separate actor after the worker is done:
 - then performs the integration-branch merge/push if, and only if, the gate is
   proven to pass.
 
+The verifier's technical approval is not user authorization for a real,
+one-time, costly, or otherwise irreversible holdout. Such a holdout requires a
+new user message authorizing the exact evaluation identity, candidate commit,
+and command. A broad `go`, plan language, or CLI flag is insufficient.
+
 If a subagent prompt asks a coding worker to promote its own experiment result,
 the prompt violates this protocol. Rewrite the prompt before dispatch.
 
@@ -72,7 +90,10 @@ not after the results exist. A record written after the numbers are known is a
 press release, not an experiment.
 
 Preregister, in `experiments/YYYY-MM-DD-short-name.md`, on the experiment
-branch, as the first commit after branching:
+branch, before the source/config delta. If the branch needs a candidate-specific
+red contract, commit that contract first on the experiment branch and seal it
+in the preregistration; do not land it on integration merely to satisfy this
+ordering:
 
 - the directional hypothesis and the single variable;
 - ONE primary metric, its exact command, and the harness state it runs against
@@ -113,8 +134,11 @@ intermediate artifacts, and counting a crash as a pass.
   verifier's diff covers everything the prereg pinned.
 - If the harness itself is wrong or missing instrumentation, that is a
   separate infrastructure task landed and committed **before** preregistration
-  — never a mid-experiment edit. The same goes for new fast-contract tests:
-  commit them before branching. The `ward allow experiment-harness-change`
+  — never a mid-experiment edit. Reusable harness and instrumentation fixes may
+  land on integration before branching. Candidate-specific red contracts stay
+  on the experiment branch and are committed before preregistration; a rejected
+  candidate must not leave its tests or config on integration. The
+  `ward allow experiment-harness-change`
   override unseals the tripwire for the rest of the session, so use it only
   for a change the prereg explicitly names.
 - Scoring is **fail-closed**: a run only counts as PASS when the harness emits
@@ -160,8 +184,9 @@ Every experiment must have:
   the change — a committed artifact, not a remembered number.
 - **Experiment branch**: isolated from the integration branch.
 - **Fast contracts**: tests or telemetry checks that fail before the full
-  benchmark if the idea is wrong — committed to the integration branch before
-  the experiment branch exists.
+  benchmark if the idea is wrong — reusable infrastructure may be committed to
+  integration, while candidate-specific contracts are committed and sealed on
+  the experiment branch before preregistration.
 - **Instrumentation contract**: the reusable telemetry/profiler surface used to
   observe the bottleneck class before changing solver behavior.
 - **Metric gate**: exact command, timeout, pass/fail threshold, seed plan, and
@@ -177,41 +202,68 @@ Every experiment must have:
 - **Record file**: repo-local markdown under `experiments/`, committed at
   prereg time and completed at the end.
 
+## Generalization And Safety Gate
+
+If the hypothesis selects behavior for a class, family, route, workload type,
+or other generalization unit, one development example from that unit is not
+evidence that the selector generalizes. Before promotion require either:
+
+- multiple development examples spanning the claimed unit's relevant
+  difficulty/shape variation; or
+- an executable structural invariant that proves the selected path is safe.
+
+For zero-loss routing or portfolio work, deterministic selection alone is not
+a safety contract. The fast gate must prove that timeout, unavailable, resource
+limit, enumeration limit, backend error, and protocol failure cannot lose a
+row when a safe backend exists. Use a sequential validated fallback or prove
+that the speculative path cannot reach those failures. If neither is possible,
+the candidate is ineligible for holdout evaluation regardless of its speedup.
+
 ## Workflow
 
 1. State the literal outcome and active experiment item before each action.
 2. Verify current branch and tracked-file cleanliness.
-3. Verify the required instrumentation AND the fast contracts exist for the
-   bottleneck class. If either is missing, stop: the next task is
-   infrastructure, committed to the integration branch before any experiment
-   branch exists. New test files cannot be added once the evaluator is sealed.
+3. Verify the required instrumentation exists for the bottleneck class. If
+   reusable instrumentation is missing, stop for a separate infrastructure
+   task on integration. Identify whether each missing fast contract is reusable
+   infrastructure or candidate-specific; never land candidate-specific debris
+   on integration.
 4. Run the baseline: the preplanned seeds/instances, with instrumentation
    enabled, recording per-run results and the spread. This is the noise floor
    every later claim is judged against.
-5. Enter a dedicated experiment branch. For a Claude Task worker, the
-   dispatcher must prepare the branch/worktree before launching the explicit
-   `protocols:experiment-worker` agent because its Ward restrictions are active
-   from SubagentStart. For a direct Codex/Gemini worker, create/enter the branch
-   before launching the CLI.
-6. Confirm actor-local enforcement. A Claude Task worker is already in phase
-   `experiment-worker` and must not run `ward set`. A direct CLI launch must
-   have unique `WARD_SESSION` and `WARD_ACTOR_ID` values and must run
-   `ward set experiment-worker` before changes (`ward.exe set
-   experiment-worker` from Windows-hosted Git Bash). That command changes only
-   the CLI actor record. The phase mechanically blocks the worker from
-   pushing, merging, rebasing, cherry-picking, or switching the integration
-   branch, and blocks Edit/Write to common evaluator directories as a
-   tripwire. Bash-mediated evaluator changes are not gate-blocked; they are
-   caught by the verifier's evaluator-path diff at promotion time.
-7. **Preregister**: write the record file with the frozen fields (hypothesis,
+5. Enter a dedicated experiment branch. The dispatcher prepares the
+   branch/worktree before launching the explicit experiment worker.
+6. If needed, have an authorized setup actor commit candidate-specific red
+   contracts on this experiment branch and record their expected failure before
+   the experiment worker starts. The experiment-worker Ward phase blocks test
+   edits by design, so the worker must never weaken or create its own gate.
+7. Confirm actor-local enforcement. A Claude Task worker is already in phase
+   `experiment-worker` and must not run `ward set`. Native Codex uses Foreman's
+   capability path: `spawn_agent` receives `fork_turns: "none"`, the exact
+   first message line `WARD-DELEGATE/1 phase=experiment-worker`, and the real
+   prompt. The child's exact first action is the Ward-injected
+   `ward accept-delegation <token>`. The child never chooses its phase or runs
+   `ward set`, and a Codex parent never self-launches `codex exec`. An explicitly
+   external CLI worker instead uses unique `WARD_SESSION` and `WARD_ACTOR_ID`
+   values and selects only its own actor phase. The phase
+   mechanically blocks the worker from pushing, merging, rebasing,
+   cherry-picking, or switching the integration branch, and blocks Edit/Write
+   to common evaluator directories as a tripwire. Bash-mediated evaluator
+   changes are not gate-blocked; they are
+    caught by the verifier's evaluator-path diff at promotion time.
+8. Verify any candidate-specific contracts are committed, failing for the
+   intended reason, and included in the evaluator seal. They never reach
+   integration unless the candidate itself passes promotion.
+9. **Preregister**: write the record file with the frozen fields (hypothesis,
    single variable, primary metric + harness hash, minimum effect, seed plan,
    analysis plan, kill criteria, falsification condition) and commit it.
-8. Make the smallest source/config change that tests the hypothesis.
-9. Commit the source/config change with explicit paths.
-10. Run fast contracts.
-11. Run the preregistered metric gate — same seeds, same instrumentation,
+10. Make the smallest source/config change that tests the hypothesis.
+11. Commit the source/config change with explicit paths.
+12. Run fast contracts, including generalization/safety contracts when the
+    hypothesis selects behavior across a class.
+13. Run the preregistered metric gate — same seeds, same instrumentation,
     fail-closed scoring.
-12. If the metric gate fails or is ambiguous, run failure analysis before
+14. If the metric gate fails or is ambiguous, run failure analysis before
     calling the experiment complete:
     - use the profiler on the real hot execution path;
     - for Python worker/solver paths, use `py-spy` unless the repository names
@@ -221,10 +273,10 @@ Every experiment must have:
     - compare against the baseline or previous profile;
     - state whether the dominant cost moved, shrank, or stayed unchanged;
     - name the next target from the evidence.
-13. Complete the record: append results, telemetry, failure analysis, and the
+15. Complete the record: append results, telemetry, failure analysis, and the
     recommendation. Do not touch the preregistered fields.
-14. Commit the completed record.
-15. Worker decision:
+16. Commit the completed record.
+17. Worker decision:
     - **recommend promotion** only if the preregistered gate appears to pass
       on the paired numbers, regression checks hold, and the operational
       reason for the improvement is recorded;
@@ -232,10 +284,11 @@ Every experiment must have:
       or operationally measured explanation;
     - **incomplete: profile required** if the gate failed but the bottleneck is
       still unknown.
-16. Stop worker execution after the experiment record is committed. Do not
+18. Stop worker execution after the experiment record is committed. Do not
     switch to the integration branch. Do not merge. Do not push. Report the
     commit hashes and recommendation to the verifier/foreman/parent.
-17. Separate promotion gate (verifier/foreman/parent):
+19. Separate promotion gate (verifier/foreman/parent), while candidate source
+    remains only on the experiment branch:
     - read the worker's experiment record and raw command output;
     - **prereg integrity**: diff the prereg commit against the final record —
       any change to frozen fields invalidates the experiment;
@@ -248,11 +301,13 @@ Every experiment must have:
       special case. A win nobody tried to kill is unverified;
     - verify regression checks and branch cleanliness;
     - verify the source delta is exactly the intended passing experiment;
-    - run the sealed holdout now if one exists;
-    - only then merge/push to the integration branch.
-18. If abandoning, the separate verifier/foreman/parent records the result on
-    the integration branch if needed — negative results are committed
-    artifacts, not scratch. Do not merge the failed source delta.
+    - obtain explicit user authorization before any irreversible holdout;
+    - run the holdout from a clean checkout of the exact experiment commit;
+    - only after the holdout passes, merge/push the source delta to integration.
+20. If abandoning, the separate verifier/foreman/parent may copy or cherry-pick
+    only the negative record and evidence to integration. Leave failed source,
+    config, and candidate-specific contracts on the experiment branch. Do not
+    merge them and then create integration reverts.
 
 ## Instrumentation Rule
 
@@ -438,3 +493,9 @@ These generated diagnostics were [committed/not committed].
 - Letting the same coding worker implement the experiment, interpret the metric
   gate, and merge or push the integration branch.
 - Accepting a win that no separate actor tried to explain away.
+- Running a single experiment when several hypotheses compete for the goal.
+- Treating one development example as proof for a family/class-level selector.
+- Proving deterministic routing without proving safe failure/fallback behavior.
+- Treating verifier approval as authorization to consume an irreversible
+  holdout.
+- Integrating candidate source before its authorized holdout passes.

@@ -41,9 +41,10 @@ class ActorScopedWardContractTest(unittest.TestCase):
         profile = (ROOT / "plugins/protocols/ward-profile/profile.yaml").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(manifest["version"], "0.3.4")
-        self.assertIn("version: 0.3.4", profile)
+        self.assertEqual(manifest["version"], "0.3.5")
+        self.assertIn("version: 0.3.5", profile)
         self.assertIn("actor-scoped-protocol-phases", profile)
+        self.assertIn("native-codex-parent-authorized-delegation", profile)
 
     def test_subagent_start_hook_initializes_explicit_roles(self) -> None:
         hooks = json.loads(
@@ -98,6 +99,12 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertNotIn("phase=worker", role_hook)
         self.assertNotIn("--session", role_hook)
 
+        register_hook = (ROOT / "plugins/protocols/hooks/ward-register.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("accept-delegation --help", register_hook)
+        self.assertIn("native Codex delegation capabilities", register_hook)
+
     def test_native_codex_scout_is_mechanically_read_only(self) -> None:
         rule = (
             ROOT
@@ -126,6 +133,26 @@ class ActorScopedWardContractTest(unittest.TestCase):
         )
         self.assertIn("role initialization", rule)
 
+    def test_native_codex_delegation_requires_foreman_and_supported_phase(self) -> None:
+        rule = (
+            ROOT / "plugins/protocols/ward-profile/rules/delegation-gate.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"ward_delegation_phase" in input', rule)
+        self.assertIn('tool == "spawn_agent"', rule)
+        self.assertIn('session.phase == "foreman"', rule)
+        for phase in (
+            "scout",
+            "coder",
+            "analyst",
+            "verifier",
+            "researcher",
+            "adversary",
+            "experiment-worker",
+            "codex-scout",
+        ):
+            self.assertIn(f'"{phase}"', rule)
+        self.assertNotIn('"foreman",', rule)
+
     def test_experiment_worker_agent_is_explicit(self) -> None:
         agent = (ROOT / "plugins/protocols/agents/experiment-worker.md").read_text(
             encoding="utf-8"
@@ -152,14 +179,58 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("ward actor phase", agent.lower())
         self.assertNotIn("ward set researcher", agent)
         self.assertIn("Claude Code Task", researcher)
-        self.assertIn("native Codex collaboration", researcher)
-        self.assertIn("direct CLI", researcher)
+        self.assertIn("native codex collaboration", researcher.lower())
+        self.assertIn("spawn_agent", researcher)
+        self.assertIn('fork_turns: "none"', researcher)
+        self.assertIn("WARD-DELEGATE/1", researcher)
+        self.assertIn("ward accept-delegation <token>", researcher)
+        self.assertNotIn("ward set researcher --session", researcher)
+        self.assertNotIn("--agent <agent_id>", researcher)
+        self.assertIn("must not self-launch `codex exec`", researcher)
         self.assertNotIn("**First:** Run `ward set researcher`", researcher)
         self.assertNotIn("subagent_type: general-purpose", researcher)
         self.assertIn("protocols:researcher", phases)
         self.assertIn("Native Codex collaboration", phases)
+        self.assertIn("spawn_agent", phases)
+        self.assertIn("WARD-DELEGATE/1", phases)
+        self.assertIn("ward accept-delegation <token>", phases)
+        self.assertIn("must not self-launch `codex exec`", phases)
         self.assertNotIn("Always dispatch via general-purpose", phases)
         self.assertIn("protocols:researcher", foreman)
+        self.assertIn("spawn_agent", foreman)
+        self.assertIn('fork_turns: "none"', foreman)
+        self.assertIn("WARD-DELEGATE/1", foreman)
+        self.assertIn("ward accept-delegation <token>", foreman)
+        self.assertIn("wait_agent", foreman)
+        self.assertIn("followup_task", foreman)
+        self.assertIn("must not self-launch `codex exec`", foreman)
+
+    def test_native_codex_capability_activation_is_documented(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        campaign = (
+            ROOT / "plugins/protocols/skills/campaign/SKILL.md"
+        ).read_text(encoding="utf-8")
+        experiment = (
+            ROOT / "plugins/protocols/skills/experiment/SKILL.md"
+        ).read_text(encoding="utf-8")
+        spec_updating = (
+            ROOT / "plugins/protocols/skills/spec-updating/SKILL.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("parent-authorized Ward capability", readme)
+        self.assertIn('fork_turns: "none"', readme)
+        self.assertIn("WARD-DELEGATE/1", readme)
+        self.assertIn("ward accept-delegation <token>", readme)
+        self.assertIn("never changes the session's active CLI actor binding", readme)
+        self.assertIn("Codex parent must not", readme)
+        self.assertIn("self-launch `codex exec`", readme)
+        self.assertIn("WARD-DELEGATE/1 phase=experiment-worker", campaign)
+        self.assertIn("ward accept-delegation <token>", campaign)
+        self.assertIn("WARD-DELEGATE/1 phase=experiment-worker", experiment)
+        self.assertIn("ward accept-delegation <token>", experiment)
+        self.assertIn("WARD-DELEGATE/1 phase=verifier", spec_updating)
+        self.assertIn("ward accept-delegation <token>", spec_updating)
+        self.assertIn("Do not self-launch `codex exec`", spec_updating)
 
     def test_researcher_gate_is_report_scoped_and_discovery_only(self) -> None:
         rule = (
@@ -175,9 +246,9 @@ class ActorScopedWardContractTest(unittest.TestCase):
         installer = load_installer()
         self.assertEqual(
             installer.REQUIRED_WARD_REVISION,
-            "06f59c33051a6de948e75072a14d03c5494ffc37",
+            "634d004ad79a4322302d48e49b711863a9131937",
         )
-        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.4")
+        self.assertEqual(installer.REQUIRED_PROTOCOLS_VERSION, "0.3.5")
         self.assertTrue(callable(installer.check_ward_compatibility))
         self.assertTrue(callable(installer.check_claude_plugin_compatibility))
         marketplace = installer.ClaudeMarketplace(
@@ -196,7 +267,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
         current = [
             {
                 "plugin": "protocols@protocols-marketplace",
-                "version": "0.3.4",
+                "version": "0.3.5",
                 "scope": "user",
                 "status": "enabled",
             }
@@ -269,7 +340,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
                             "pluginId": plugin_id,
                             "name": "protocols",
                             "marketplaceName": "protocols-marketplace",
-                            "version": "0.3.4",
+                            "version": "0.3.5",
                             "installed": True,
                             "enabled": True,
                             "source": {"path": str(plugin_root)},
@@ -349,13 +420,13 @@ class ActorScopedWardContractTest(unittest.TestCase):
 
     def test_codex_install_trusts_only_active_protocols_hooks_after_consent(self) -> None:
         installer = load_installer()
-        plugin_root = Path.home() / ".codex/plugins/cache/protocols-marketplace/protocols/0.3.4"
+        plugin_root = Path.home() / ".codex/plugins/cache/protocols-marketplace/protocols/0.3.5"
         entries = [
             {
                 "pluginId": installer.CODEX_PROTOCOLS_PLUGIN_ID,
                 "name": "protocols",
                 "marketplaceName": "protocols-marketplace",
-                "version": "0.3.4",
+                "version": "0.3.5",
                 "installed": True,
                 "enabled": True,
                 "source": {"path": str(plugin_root)},
@@ -490,7 +561,7 @@ class ActorScopedWardContractTest(unittest.TestCase):
                         "pluginId": plugin_id,
                         "name": "protocols",
                         "marketplaceName": "protocols-marketplace",
-                        "version": "0.3.4",
+                        "version": "0.3.5",
                         "installed": True,
                         "enabled": True,
                         "source": {"path": "current-cache"},

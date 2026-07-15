@@ -19,18 +19,22 @@ Orchestrate via filesystem artifacts. No agent-to-agent communication. Foreman r
   `protocols:analyst`, or `protocols:verifier`. The SubagentStart hook assigns
   the actor-local Ward phase. Never use `general-purpose` as a role substitute,
   and never tell a Task worker to run `ward set`.
-- **Native Codex collaboration:** `spawn_agent` currently has no protocol-role
-  selector. Its generic child is discovery-only. Tell it not to run `ward set`,
-  limit the assignment to read-only discovery, and have it return findings to
-  the parent. The parent persists those findings as the phase artifact. Do not
-  delegate implementation or filesystem-report writes through this surface.
-- **Direct Codex/Gemini CLI:** Give every worker a unique `WARD_SESSION` and
+- **Native Codex collaboration:** Use the internal collaboration harness.
+  From a `foreman` parent, call `spawn_agent` with `fork_turns: "none"` and an
+  exact first message line `WARD-DELEGATE/1 phase=<child-phase>`, followed by
+  the real prompt. Ward rewrites the allowed spawn with a one-use capability;
+  the child's exact first action is `ward accept-delegation <token>`. Ward
+  binds the parent-selected phase to the real child actor ID. The child never
+  runs `ward set`, and no parent binding snapshot or restore is needed.
+  A Codex parent must not self-launch `codex exec` to create a Codex subagent.
+- **External Codex/Gemini CLI:** Give every worker a unique `WARD_SESSION` and
   `WARD_ACTOR_ID`, name the required phase in its physical prompt and CLI
   prompt, and have it run `ward set <phase>` before work.
 
 If the host cannot express the authority required by a phase, run that phase in
-the parent or use an explicitly actor-bound direct CLI worker. Do not infer a
-role from a task name or prompt text.
+the parent. Direct CLI workers are external-agent integrations, not a fallback
+for native Codex internal collaboration. Do not infer a role from a task name
+or prompt text.
 
 ## Phase Types
 

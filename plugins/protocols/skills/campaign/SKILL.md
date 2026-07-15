@@ -1,6 +1,6 @@
 ---
 name: campaign
-description: Multi-hypothesis research campaign protocol. Use for open-ended optimization goals ("make X faster", "improve the metric") where several candidate ideas compete for a limited budget. Triages ideas cheaply, confirms survivors with full preregistered experiments, and keeps a committed ledger so dead ideas stay dead.
+description: Multi-hypothesis research campaign protocol for open-ended optimization goals ("make X faster", "improve the metric") where agent-generated or user-supplied ideas compete for a limited budget. Searches prior work, triages ideas cheaply, confirms survivors with preregistered experiments, and keeps dead ideas dead.
 disable-model-invocation: false
 ---
 
@@ -17,6 +17,38 @@ A campaign is a search over hypotheses, not a queue of them. Budget flows
 toward evidence: many ideas get a cheap look, few get a full experiment, and
 every death is recorded with its reason so the search never revisits it.
 
+Campaign managers may autonomously generate, rank, prune, and test hypotheses
+on development data. That is the point of the protocol. A broad user request
+to optimize a metric authorizes reversible search within its stated scope and
+the recorded campaign budget; it does not authorize changing the goal,
+expanding the budget, or consuming an irreversible evaluation surface.
+
+## Prior-Art Gate
+
+Before candidate ranking, dispatch a research worker to search the repository's
+experiment ledgers, failure records, profiles, notes, history, and relevant
+literature locations. The worker commits a search record that names the
+locations and terms searched and summarizes every relevant hit. If no relevant
+prior work exists, record `none found`; absence after a documented search is a
+valid clean prior. Do not invent a literature dependency or block indefinitely
+because a repository has no papers. The foreman/manager reads and uses the
+artifact but does not write it.
+
+An idea recorded as dead is ineligible unless the campaign states what changed
+about its cause of death. Memory or chat summaries do not replace the current
+repo-local search.
+
+## Irreversible-Action Authority
+
+A verifier recommendation does not authorize a real, one-time, costly, or
+otherwise irreversible holdout. Before opening one, stop and obtain a new user
+message authorizing the exact evaluation identity and candidate commit. A CLI
+flag, broad `go`, plan language, or another agent's approval is insufficient.
+
+Reversible development probes within the campaign frame do not require a user
+checkpoint. Ask only before an irreversible action, a goal/scope change, or a
+budget expansion.
+
 The campaign manager coordinates and never implements — run `ward set foreman`
 (`ward.exe set foreman` from Windows-hosted Git Bash) for the main actor and
 follow the foreman protocol for all dispatch. Workers run the experiment
@@ -32,12 +64,15 @@ a ledger update; a worker types it.
   dispatches workers, prunes. Never edits source, never runs benchmarks,
   never writes the ledger directly — every ledger create/update is included
   in a dispatched worker's prompt (the worker appends its line and commits).
-- **Experiment workers**: one hypothesis each, dispatched explicitly as
-  `subagent_type: protocols:experiment-worker` into a dedicated branch/worktree
-  prepared before Task launch. SubagentStart sets only that worker actor's
-  `experiment-worker` phase; the worker never runs a session-global
-  transition and never promotes itself. Direct CLI workers instead receive a
-  unique `WARD_SESSION` plus `WARD_ACTOR_ID` and set only that actor phase.
+- **Experiment workers**: one hypothesis each, dispatched into a dedicated
+  branch/worktree prepared before launch. Claude uses
+  `subagent_type: protocols:experiment-worker`; a native Codex Foreman uses
+  `spawn_agent` with `fork_turns: "none"` and the exact first message line
+  `WARD-DELEGATE/1 phase=experiment-worker`. The child's exact first action is
+  the Ward-injected `ward accept-delegation <token>`. The worker never chooses
+  its own phase, runs `ward set`, or promotes itself. Direct CLI workers are
+  only for explicitly external-agent use, not for a Codex parent to launch a
+  Codex child.
 - **Verifier**: independent promotion gate per the experiment protocol,
   including the adversary pass.
 
@@ -56,6 +91,8 @@ with:
   triage and tuning, run only by the verifier at promotion time;
 - campaign kill criteria: e.g. two consecutive rounds with no survivor, or
   budget exhausted.
+- the prior-art search artifact and the exact boundary between autonomous
+  development work and user-authorized irreversible actions.
 
 No candidate work starts before the ledger commit exists.
 
@@ -68,6 +105,10 @@ longer holds (and the new entry must say what changed). Rank what remains by
 expected effect and cost to test; when objectives compete (speed vs
 correctness vs memory), keep the non-dominated set rather than forcing a
 single ranking.
+
+Hypotheses may be agent-generated. Do not ask the user to choose among ordinary
+reversible candidates unless the user's domain judgment is itself required
+evidence or the choice changes the campaign's approved scope.
 
 ### 3. Triage wide
 
@@ -96,6 +137,12 @@ Per the experiment protocol's promotion gate, one experiment at a time, by the
 verifier — including the holdout run and the adversary pass. Two survivors
 that both pass are still promoted separately; if they interact, the second is
 re-measured on top of the first before promotion.
+
+Keep candidate source on its experiment branch through holdout evaluation.
+After explicit user authorization, run the holdout from a clean checkout of
+the exact candidate commit. Only a holdout-passing source delta may reach the
+integration branch. For a failed candidate, bring back only its ledger update
+and evidence; do not merge the source and then create integration reverts.
 
 ### 6. Synthesize
 
@@ -144,3 +191,8 @@ Dominant cost after round: [from profile evidence]
   blocks it, and durable artifacts are worker deliverables.
 - Ending a round with no ledger update.
 - Adding one more round after campaign kill criteria have fired.
+- Ranking candidates before the prior-art search is committed.
+- Asking the user to perform routine hypothesis generation that the campaign
+  manager exists to automate.
+- Treating verifier approval as authority to consume an irreversible holdout.
+- Integrating candidate source before its authorized holdout passes.

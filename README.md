@@ -87,29 +87,44 @@ only for hosts that emit them without plugin qualification. A physical prompt
 and its Task launch parameter must both name the same supported type. Task
 workers never run a session-global transition.
 
-Native Codex collaboration workers are not direct CLI workers: the current
-`spawn_agent` surface has no protocol-role selector. The host gives them a
-stable `agent_id` and may send `agent_type=default`, a known generic worker
-type, or omit the type. Codex's required non-empty `turn_id` lifecycle extension
-distinguishes the omitted-type native case from Claude Task. Ward does not infer
-a write-capable protocol role from prompt text, actor ID, task name, or missing
-type. The hook assigns only the distinct `codex-scout` phase, which denies Edit
-and Write and limits Bash to parsed `rg` commands and the approved read-only Git
-queries (`status`, `diff`, `log`, `show`, and `rev-parse`), without redirection
-or command substitution. A native child returns findings to its parent; the
-parent persists any required report. Missing types without `turn_id` and
-explicit unknown types do not receive this phase.
+Native Codex collaboration workers are not direct CLI workers. The current
+`spawn_agent` surface has no protocol-role selector, so native activation uses
+a parent-authorized Ward capability. An actor already in `foreman` launches the
+real task with `fork_turns: "none"` and this exact first message line:
 
-Direct Codex/Gemini CLI workers are separate again: launch each with a unique
-`WARD_SESSION` and `WARD_ACTOR_ID`, then have that CLI worker run `ward set
-<phase>` to select an explicit protocol phase. Hosts that cannot provide either
-a real collaboration `agent_id` or an explicit `WARD_ACTOR_ID` cannot safely
-run concurrent mechanically enforced roles.
+```text
+WARD-DELEGATE/1 phase=<child-phase>
+```
+
+Ward evaluates the spawn against the parent's real actor phase. For a supported
+worker phase, Ward issues a five-minute one-use grant and rewrites the task so
+the child's exact first action is `ward accept-delegation <token>`. The child's
+PreToolUse event supplies the opaque host `agent_id`; Ward consumes the grant
+under that identity and applies the phase stored by the parent. The child never
+chooses its phase or runs `ward set`. Issuance/redemption never changes the session's active CLI actor binding. An unrewritten header has no authority. A
+Codex parent must not self-launch `codex exec` to create a Codex subagent.
+
+The host may send `agent_type=default`, a known generic worker type, or omit the
+type. Codex's required non-empty `turn_id` lifecycle extension distinguishes
+the omitted-type native case from Claude Task. Before capability redemption,
+`codex-scout` denies Edit and Write and limits Bash to parsed `rg` commands and
+approved read-only Git queries (`status`, `diff`, `log`, `show`, and
+`rev-parse`) without redirection or command substitution. Missing types without
+`turn_id` and explicit unknown types do not receive this phase.
+
+Direct Codex/Gemini CLI workers are separate external-agent integrations. A
+non-Codex host may launch one with a unique `WARD_SESSION` and `WARD_ACTOR_ID`,
+then have that external worker run `ward set <phase>`. This is not a fallback
+for a Codex parent: native Codex subagents use the capability-bearing
+`spawn_agent` request. Hosts that cannot provide either a real collaboration
+`agent_id` or an explicit `WARD_ACTOR_ID` cannot safely run concurrent
+mechanically enforced roles.
 
 ### Gate Rules
 
 | Rule | Phase | Denies |
 |------|-------|--------|
+| `delegation-gate.yaml` | parent `foreman` | Native Codex capability requests from any other parent phase or for an unsupported worker phase |
 | `foreman-gate.yaml` | `foreman` | Bash, Edit, Write (except prompts/ and notes-*) |
 | `adversary-gate.yaml` | `adversary` | Edit, Write, Bash |
 | `researcher-gate.yaml` | `researcher` | Edit/PowerShell, non-report Write, and Bash outside the read-only discovery grammar |
@@ -173,9 +188,9 @@ so the new lifecycle hook chain is loaded.
 
 ## Required compatibility set
 
-- Protocols Claude and Codex native plugins `0.3.4`
-- `protocols-gates` Ward profile `0.3.4`
-- Ward revision `06f59c33051a6de948e75072a14d03c5494ffc37`, built from a clean committed tree
+- Protocols Claude and Codex native plugins `0.3.5`
+- `protocols-gates` Ward profile `0.3.5`
+- Ward revision `634d004ad79a4322302d48e49b711863a9131937`, built from a clean committed tree
 - Ward lifecycle hooks: `PreToolUse eval`, `SubagentStart start-actor`,
   `SubagentStop end-actor`, and `SessionEnd end-session`, each installed by
   `ward install`

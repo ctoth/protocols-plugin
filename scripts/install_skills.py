@@ -28,8 +28,8 @@ from pathlib import Path
 
 MARKER_FILENAME = ".protocols-plugin-install.json"
 DEFAULT_PLATFORMS = ("codex", "claude", "gemini")
-REQUIRED_WARD_REVISION = "06f59c33051a6de948e75072a14d03c5494ffc37"
-REQUIRED_PROTOCOLS_VERSION = "0.3.4"
+REQUIRED_WARD_REVISION = "634d004ad79a4322302d48e49b711863a9131937"
+REQUIRED_PROTOCOLS_VERSION = "0.3.5"
 CODEX_PROTOCOLS_PLUGIN_ID = "protocols@protocols-marketplace"
 CODEX_SESSION_HOOK_KEY = (
     f"{CODEX_PROTOCOLS_PLUGIN_ID}:hooks/hooks.json:session_start:0:0"
@@ -711,6 +711,7 @@ def check_ward_compatibility(ward_path: str) -> tuple[list[str], list[str]]:
         (("set", "--help"), "--hook-input"),
         (("end-actor", "--help"), "Delete one actor"),
         (("end-session", "--help"), "session family"),
+        (("accept-delegation", "--help"), "parent-issued child capability"),
     ):
         result = run_cli([ward_path, *args])
         output = format_cli_output(result)

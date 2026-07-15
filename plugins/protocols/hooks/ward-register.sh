@@ -38,6 +38,10 @@ command -v "$WARD_BIN" >/dev/null 2>&1 || {
     echo "protocols: installed Ward lacks actor-scoped hook initialization" >&2
     exit 1
 }
+"$WARD_BIN" accept-delegation --help 2>&1 | grep -q "parent-issued child capability" || {
+    echo "protocols: installed Ward lacks native Codex delegation capabilities" >&2
+    exit 1
+}
 
 "$WARD_BIN" validate-profile "$PROFILE_DIR" >/dev/null
 
