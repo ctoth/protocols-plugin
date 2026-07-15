@@ -234,6 +234,20 @@ class ActorScopedWardContractTest(unittest.TestCase):
         self.assertIn("ward accept-delegation <token>", spec_updating)
         self.assertIn("Do not self-launch `codex exec`", spec_updating)
 
+    def test_campaign_does_not_require_documentation_commit_ceremony(self) -> None:
+        campaign = (
+            ROOT / "plugins/protocols/skills/campaign/SKILL.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("ledger", campaign.lower())
+        self.assertNotIn("experiments/INDEX.md", campaign)
+        self.assertNotIn("commits a search record", campaign)
+        self.assertNotIn("never runs benchmarks", campaign)
+        self.assertNotIn("never edits source", campaign)
+        self.assertNotIn("No candidate work starts before", campaign)
+        self.assertNotIn("bring back only", campaign)
+        self.assertNotIn("dispatch a ledger update", campaign)
+
     def test_researcher_gate_is_report_scoped_and_discovery_only(self) -> None:
         rule = (
             ROOT / "plugins/protocols/ward-profile/rules/researcher-gate.yaml"
