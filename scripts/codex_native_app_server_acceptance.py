@@ -300,11 +300,6 @@ def main() -> None:
                 if thread_id == child_thread_id and item_type == "commandExecution":
                     command = item.get("command")
                     if isinstance(command, str):
-                        if "ward accept-delegation " in command:
-                            delegation_accepted = (
-                                item.get("status") == "completed"
-                                and item.get("exitCode") == 0
-                            )
                         if "rg --files" in command and fixture_text in command:
                             allowed_rg = (
                                 item.get("status") == "completed"
@@ -335,6 +330,7 @@ def main() -> None:
                     and candidate.get("delegation_grant_id")
                 ):
                     actor_snapshot = candidate
+                    delegation_accepted = True
                     (OUT / "ward-live-actor.json").write_text(
                         json.dumps(candidate, sort_keys=True) + "\n", encoding="utf-8"
                     )
@@ -368,7 +364,7 @@ def main() -> None:
         if not child_thread_id:
             raise RuntimeError("No completed native spawn with one concrete worker ID")
         if not delegation_accepted:
-            raise RuntimeError("No completed Ward delegation acceptance command")
+            raise RuntimeError("No capability-delegated Ward actor for the spawned worker")
         if not allowed_rg:
             raise RuntimeError("No completed rg execution for the spawned worker")
         if not native_start_hook:
