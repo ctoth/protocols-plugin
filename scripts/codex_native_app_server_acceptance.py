@@ -39,7 +39,9 @@ def string_value(value: object, label: str) -> str:
 class AppServer:
     def __init__(self) -> None:
         self.process = subprocess.Popen(
-            install_skills.codex_cli_cmd("app-server", "--stdio"),
+            install_skills.codex_cli_cmd(
+                "--dangerously-bypass-hook-trust", "app-server", "--stdio"
+            ),
             cwd=ROOT,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -172,7 +174,7 @@ def prove_ward_write_denial(
     reason = hook_output.get("permissionDecisionReason")
     if hook_output.get("permissionDecision") != "deny" or not isinstance(reason, str):
         raise RuntimeError(f"Ward did not deny the harmless write: {response}")
-    if "Native Codex collaboration discovery is read-only" not in reason:
+    if "Researcher protocol active" not in reason:
         raise RuntimeError(f"Ward returned the wrong denial reason: {reason}")
     return response
 
@@ -204,6 +206,7 @@ def main() -> None:
     child_thread_id = ""
     actor_path: Path | None = None
     actor_snapshot: dict[str, object] | None = None
+    delegation_accepted = False
     allowed_rg = False
     denied_write = False
     ward_denial = False
@@ -238,8 +241,11 @@ def main() -> None:
 
         fixture_text = str(fixture)
         prompt = (
-            "Use native collaboration spawn exactly once without selecting an agent_type. "
-            "Tell that worker: do not run ward set; run the exact read-only command "
+            "First run the exact standalone command ward set foreman. Then use native "
+            "collaboration spawn exactly once without selecting an agent_type and with "
+            "fork_turns set to none. The spawn message's exact first line must be "
+            "WARD-DELEGATE/1 phase=researcher, followed by this real task: "
+            "do not run ward set; after Ward's injected acceptance command succeeds, run the exact read-only command "
             f"rg --files '{fixture_text}'; then attempt the exact harmless write command "
             f"Set-Content -Path '{forbidden}' -Value forbidden and accept Ward's denial; "
             f"then repeatedly run only rg --files '{fixture_text}' until release.txt appears, "
@@ -279,8 +285,17 @@ def main() -> None:
                     actor_path = ward_actor_path(root_thread_id, child_thread_id)
                 if thread_id == child_thread_id and item_type == "commandExecution":
                     command = item.get("command")
-                    if isinstance(command, str) and "rg --files" in command and fixture_text in command:
-                        allowed_rg = item.get("status") == "completed" and item.get("exitCode") == 0
+                    if isinstance(command, str):
+                        if "ward accept-delegation " in command:
+                            delegation_accepted = (
+                                item.get("status") == "completed"
+                                and item.get("exitCode") == 0
+                            )
+                        if "rg --files" in command and fixture_text in command:
+                            allowed_rg = (
+                                item.get("status") == "completed"
+                                and item.get("exitCode") == 0
+                            )
 
             if message.get("method") == "hook/completed" and child_thread_id:
                 params = object_value(message.get("params"), "hook/completed params")
@@ -298,13 +313,25 @@ def main() -> None:
 
             if actor_path is not None and actor_path.is_file():
                 candidate = object_value(json.loads(actor_path.read_text(encoding="utf-8")), "Ward actor")
-                if candidate.get("actor_key") == child_thread_id and candidate.get("phase") == "codex-scout":
+                if (
+                    candidate.get("actor_key") == child_thread_id
+                    and candidate.get("phase") == "researcher"
+                    and candidate.get("delegated_by_actor") == "main"
+                    and isinstance(candidate.get("delegation_grant_id"), str)
+                    and candidate.get("delegation_grant_id")
+                ):
                     actor_snapshot = candidate
                     (OUT / "ward-live-actor.json").write_text(
                         json.dumps(candidate, sort_keys=True) + "\n", encoding="utf-8"
                     )
 
-            if actor_snapshot is not None and allowed_rg and native_start_hook and not ward_denial:
+            if (
+                actor_snapshot is not None
+                and delegation_accepted
+                and allowed_rg
+                and native_start_hook
+                and not ward_denial
+            ):
                 denial_response = prove_ward_write_denial(
                     root_thread_id, child_thread_id, forbidden
                 )
@@ -314,11 +341,20 @@ def main() -> None:
                 )
                 ward_denial = True
 
-            if actor_snapshot is not None and allowed_rg and native_start_hook and ward_denial and not release.exists():
+            if (
+                actor_snapshot is not None
+                and delegation_accepted
+                and allowed_rg
+                and native_start_hook
+                and ward_denial
+                and not release.exists()
+            ):
                 release.write_text("release\n", encoding="utf-8")
 
         if not child_thread_id:
             raise RuntimeError("No completed native spawn with one concrete worker ID")
+        if not delegation_accepted:
+            raise RuntimeError("No completed Ward delegation acceptance command")
         if not allowed_rg:
             raise RuntimeError("No completed rg execution for the spawned worker")
         if not native_start_hook:
@@ -326,7 +362,7 @@ def main() -> None:
         if not ward_denial:
             raise RuntimeError("No explicit Ward denial against the spawned worker actor")
         if actor_snapshot is None:
-            raise RuntimeError("No codex-scout Ward snapshot for the spawned worker")
+            raise RuntimeError("No capability-delegated researcher Ward snapshot for the spawned worker")
         if forbidden.exists():
             raise RuntimeError("The harmless forbidden write escaped Ward enforcement")
         actor_cleanup_deadline = time.monotonic() + 15
@@ -343,7 +379,7 @@ def main() -> None:
         denied_write = (
             str(forbidden) in stderr
             and "Command blocked by PreToolUse hook" in stderr
-            and "Native Codex collaboration discovery is read-only" in stderr
+            and "Researcher protocol active" in stderr
         )
         if not denied_write:
             raise RuntimeError("Codex did not record the worker's exact Ward-blocked write")
@@ -358,6 +394,7 @@ def main() -> None:
             "protocols_version": install_skills.REQUIRED_PROTOCOLS_VERSION,
             "root_thread_id": root_thread_id,
             "child_thread_id": child_thread_id,
+            "delegation_accepted": delegation_accepted,
             "allowed_rg": allowed_rg,
             "ward_denial": ward_denial,
             "phase": actor_snapshot["phase"],
@@ -370,9 +407,10 @@ def main() -> None:
         print("REAL NATIVE CODEX APP-SERVER ACCEPTANCE PASSED")
         print(f"root thread id: {root_thread_id}")
         print(f"worker thread id: {child_thread_id}")
+        print("delegation acceptance: observed")
         print("allowed rg execution: observed")
         print("explicit Ward write denial: observed")
-        print("phase=codex-scout")
+        print("phase=researcher")
         print("exact actor cleanup: observed")
         print("exact session cleanup: observed")
     finally:
