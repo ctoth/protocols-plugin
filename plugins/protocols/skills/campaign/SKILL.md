@@ -31,8 +31,8 @@ literature locations. The worker commits a search record that names the
 locations and terms searched and summarizes every relevant hit. If no relevant
 prior work exists, record `none found`; absence after a documented search is a
 valid clean prior. Do not invent a literature dependency or block indefinitely
-because a repository has no papers. The foreman/manager reads and uses the
-artifact but does not write it.
+because a repository has no papers. The manager reads and uses the artifact but
+does not write it.
 
 An idea recorded as dead is ineligible unless the campaign states what changed
 about its cause of death. Memory or chat summaries do not replace the current
@@ -49,15 +49,6 @@ Reversible development probes within the campaign frame do not require a user
 checkpoint. Ask only before an irreversible action, a goal/scope change, or a
 budget expansion.
 
-The campaign manager coordinates and never implements — run `ward set foreman`
-(`ward.exe set foreman` from Windows-hosted Git Bash) for the main actor and
-follow the foreman protocol for all dispatch. Workers run the experiment
-protocol; the manager runs the portfolio. The foreman gate blocks the manager
-from writing or committing anything outside `prompts/` and `notes-*` — so the
-ledger, like all durable artifacts, is written and committed by dispatched
-workers, never by the manager's own hands. The manager decides every word of
-a ledger update; a worker types it.
-
 ## Roles
 
 - **Manager** (you): frames the goal, owns the ledger's content, prioritizes,
@@ -65,14 +56,7 @@ a ledger update; a worker types it.
   never writes the ledger directly — every ledger create/update is included
   in a dispatched worker's prompt (the worker appends its line and commits).
 - **Experiment workers**: one hypothesis each, dispatched into a dedicated
-  branch/worktree prepared before launch. Claude uses
-  `subagent_type: protocols:experiment-worker`; a native Codex Foreman uses
-  `spawn_agent` with `fork_turns: "none"` and the exact first message line
-  `WARD-DELEGATE/1 phase=experiment-worker`. The child's exact first action is
-  the Ward-injected `ward accept-delegation <token>`. The worker never chooses
-  its own phase, runs `ward set`, or promotes itself. Direct CLI workers are
-  only for explicitly external-agent use, not for a Codex parent to launch a
-  Codex child.
+  branch/worktree prepared before launch.
 - **Verifier**: independent promotion gate per the experiment protocol,
   including the adversary pass.
 
@@ -187,8 +171,6 @@ Dominant cost after round: [from profile evidence]
 - Touching the holdout during triage or tuning.
 - Pruning without recording the cause of death.
 - The manager "quickly checking" a number itself instead of dispatching.
-- The manager writing or committing the ledger itself — the foreman gate
-  blocks it, and durable artifacts are worker deliverables.
 - Ending a round with no ledger update.
 - Adding one more round after campaign kill criteria have fired.
 - Ranking candidates before the prior-art search is committed.
