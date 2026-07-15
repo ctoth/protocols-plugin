@@ -662,6 +662,11 @@ def installed_hook_commands(settings_path: Path) -> dict[str, list[str]]:
             for hook in nested:
                 command = hook.get("command") if isinstance(hook, dict) else None
                 if isinstance(command, str):
+                    args = hook.get("args")
+                    if isinstance(args, list) and all(
+                        isinstance(arg, str) for arg in args
+                    ):
+                        command = " ".join((command, *args))
                     event_commands.append(command)
         commands[event_name] = event_commands
     return commands

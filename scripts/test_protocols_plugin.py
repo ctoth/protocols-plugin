@@ -657,6 +657,31 @@ class ActorScopedWardContractTest(unittest.TestCase):
 
     def test_codex_ward_lifecycle_requires_all_user_hooks(self) -> None:
         installer = load_installer()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings_path = Path(temp_dir) / "hooks.json"
+            settings_path.write_text(
+                json.dumps(
+                    {
+                        "hooks": {
+                            "PreToolUse": [
+                                {
+                                    "hooks": [
+                                        {
+                                            "command": "C:/bin/ward.exe",
+                                            "args": ["eval"],
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                installer.installed_hook_commands(settings_path),
+                {"PreToolUse": ["C:/bin/ward.exe eval"]},
+            )
         commands = {
             event: [f'"C:/bin/ward.exe" {subcommand}']
             for event, subcommand in installer.REQUIRED_CODEX_WARD_HOOKS.items()
