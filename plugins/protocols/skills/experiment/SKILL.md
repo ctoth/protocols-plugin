@@ -75,11 +75,6 @@ Promotion requires a separate actor after the worker is done:
 - then performs the integration-branch merge/push if, and only if, the gate is
   proven to pass.
 
-The verifier's technical approval is not user authorization for a real,
-one-time, costly, or otherwise irreversible holdout. Such a holdout requires a
-new user message authorizing the exact evaluation identity, candidate commit,
-and command. A broad `go`, plan language, or CLI flag is insufficient.
-
 If a subagent prompt asks a coding worker to promote its own experiment result,
 the prompt violates this protocol. Rewrite the prompt before dispatch.
 
@@ -301,7 +296,6 @@ the candidate is ineligible for holdout evaluation regardless of its speedup.
       special case. A win nobody tried to kill is unverified;
     - verify regression checks and branch cleanliness;
     - verify the source delta is exactly the intended passing experiment;
-    - obtain explicit user authorization before any irreversible holdout;
     - run the holdout from a clean checkout of the exact experiment commit;
     - only after the holdout passes, merge/push the source delta to integration.
 20. If abandoning, the separate verifier/foreman/parent may copy or cherry-pick
@@ -496,6 +490,3 @@ These generated diagnostics were [committed/not committed].
 - Running a single experiment when several hypotheses compete for the goal.
 - Treating one development example as proof for a family/class-level selector.
 - Proving deterministic routing without proving safe failure/fallback behavior.
-- Treating verifier approval as authorization to consume an irreversible
-  holdout.
-- Integrating candidate source before its authorized holdout passes.

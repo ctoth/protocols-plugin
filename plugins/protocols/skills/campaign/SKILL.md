@@ -17,12 +17,6 @@ A campaign is a search over hypotheses, not a queue of them. Budget flows
 toward evidence: many ideas get a cheap look, few get a full experiment, and
 every death is recorded with its reason so the search never revisits it.
 
-Campaign managers may autonomously generate, rank, prune, and test hypotheses
-on development data. That is the point of the protocol. A broad user request
-to optimize a metric authorizes reversible search within its stated scope and
-the campaign budget; it does not authorize changing the goal,
-expanding the budget, or consuming an irreversible evaluation surface.
-
 ## Prior-Art Gate
 
 Before candidate ranking, search the repository's experiment results, failure
@@ -33,17 +27,6 @@ indefinitely because a repository has no papers.
 An idea recorded as dead is ineligible unless the campaign states what changed
 about its cause of death. Memory or chat summaries do not replace the current
 repo-local search.
-
-## Irreversible-Action Authority
-
-A verifier recommendation does not authorize a real, one-time, costly, or
-otherwise irreversible holdout. Before opening one, stop and obtain a new user
-message authorizing the exact evaluation identity and candidate commit. A CLI
-flag, broad `go`, plan language, or another agent's approval is insufficient.
-
-Reversible development probes within the campaign frame do not require a user
-checkpoint. Ask only before an irreversible action, a goal/scope change, or a
-budget expansion.
 
 ## Roles
 
@@ -65,8 +48,6 @@ budget expansion.
   triage and tuning, run only by the verifier at promotion time;
 - Kill criteria: e.g. two consecutive rounds with no survivor, or
   budget exhausted.
-- Boundary between autonomous development work and user-authorized
-  irreversible actions.
 
 ### 2. Ideate
 
@@ -107,11 +88,6 @@ verifier — including the holdout run and the adversary pass. Two survivors
 that both pass are still promoted separately; if they interact, the second is
 re-measured on top of the first before promotion.
 
-Keep candidate source on its experiment branch through holdout evaluation.
-After explicit user authorization, run the holdout from a clean checkout of
-the exact candidate commit. Only a holdout-passing source delta may reach the
-integration branch.
-
 ### 6. Synthesize
 
 After each round, decide from evidence: another round, a pivot to
@@ -131,5 +107,3 @@ finding one more idea.
 - Ranking candidates before the prior-art search.
 - Asking the user to perform routine hypothesis generation that the campaign
   manager exists to automate.
-- Treating verifier approval as authority to consume an irreversible holdout.
-- Integrating candidate source before its authorized holdout passes.
