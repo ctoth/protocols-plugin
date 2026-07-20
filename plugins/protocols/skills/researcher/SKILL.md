@@ -77,7 +77,6 @@ Write findings to `docs/reports/{topic}.md` with:
 
 ## Constraints
 - Do NOT implement anything
-- Do NOT modify any files except your report
 - If you find something surprising, document it - don't fix it
 ```
 
