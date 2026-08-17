@@ -141,6 +141,15 @@ claude plugin marketplace add ctoth/protocols-plugin
 claude plugin install protocols@protocols-marketplace
 ```
 
+### Native Codex plugin install
+
+```bash
+codex plugin marketplace add ctoth/protocols-plugin
+codex plugin add protocols@protocols-marketplace
+```
+
+Marketplace registration and plugin installation are separate operations. Use the script-based path below when Ward hook installation and trust are also required.
+
 ### Script-based installer for Codex and Gemini
 
 Use the bundled installer to install the native Codex plugin and Codex skill

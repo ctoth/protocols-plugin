@@ -1,0 +1,20 @@
+{
+  "name": "protocols-marketplace",
+  "interface": {
+    "displayName": "Protocols"
+  },
+  "plugins": [
+    {
+      "name": "protocols",
+      "source": {
+        "source": "local",
+        "path": "./plugins/protocols"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
